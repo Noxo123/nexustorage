@@ -407,6 +407,10 @@ public class EnergyManager {
         return null;
     }
 
+    public int registrySize() {
+        return registry.size();
+    }
+
     // ================= STATS AGREGEES (pour le GUI) =================
 
     public record EnergyStats(long capacity, long stored, double production, double consumption,

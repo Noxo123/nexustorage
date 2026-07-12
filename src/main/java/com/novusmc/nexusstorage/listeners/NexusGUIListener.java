@@ -2,6 +2,7 @@ package com.novusmc.nexusstorage.listeners;
 
 import com.novusmc.nexusstorage.Main;
 import com.novusmc.nexusstorage.gui.holders.NexusAccessHolder;
+import com.novusmc.nexusstorage.gui.holders.NexusAdminHolder;
 import com.novusmc.nexusstorage.gui.holders.NexusEnergyHolder;
 import com.novusmc.nexusstorage.gui.holders.NexusMainHolder;
 import com.novusmc.nexusstorage.gui.holders.NexusSettingsHolder;
@@ -304,6 +305,44 @@ public class NexusGUIListener implements Listener {
     public void onEnergyClick(InventoryClickEvent event) {
         if (!(event.getInventory().getHolder() instanceof NexusEnergyHolder holder)) return;
         event.setCancelled(true); // Tableau de bord en lecture seule
+    }
+
+    // ================= ADMIN =================
+
+    @EventHandler
+    public void onAdminClick(InventoryClickEvent event) {
+        if (!(event.getInventory().getHolder() instanceof NexusAdminHolder holder)) return;
+        event.setCancelled(true);
+        if (event.getClickedInventory() == null || event.getClickedInventory().getHolder() != holder) return;
+
+        Player player = (Player) event.getWhoClicked();
+        if (!player.hasPermission("nexusstorage.admin")) return;
+
+        switch (event.getSlot()) {
+            case 11 -> {
+                boolean current = plugin.getConfig().getBoolean("integrations.vault.enabled", true);
+                plugin.getConfig().set("integrations.vault.enabled", !current);
+                plugin.saveConfig();
+                plugin.getEconomyManager().refresh();
+                plugin.getGuiManager().openAdminMenu(player);
+            }
+            case 13 -> {
+                boolean current = plugin.getConfig().getBoolean("integrations.itemsadder.enabled", false);
+                plugin.getConfig().set("integrations.itemsadder.enabled", !current);
+                plugin.saveConfig();
+                plugin.getItemsAdderManager().refresh();
+                plugin.getGuiManager().openAdminMenu(player);
+            }
+            case 15 -> {
+                plugin.reloadConfig();
+                plugin.getEconomyManager().refresh();
+                plugin.getItemsAdderManager().refresh();
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                        plugin.getConfig().getString("messages.admin-reloaded")));
+                plugin.getGuiManager().openAdminMenu(player);
+            }
+            default -> {}
+        }
     }
 
     // ================= UPGRADES =================

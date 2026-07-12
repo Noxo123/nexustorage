@@ -102,7 +102,22 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
             case "energycore" -> giveEnergyItem(player, EnergyBlockType.ENERGY_CORE);
             case "regulator" -> giveEnergyItem(player, EnergyBlockType.REDSTONE_REGULATOR);
             case "monitor" -> giveEnergyItem(player, EnergyBlockType.ENERGY_MONITOR);
-            default -> msg(player, "&cUsage: /nexus give <core|tablet|solarpanel|solarpanel2|capacitor|capacitor2|cable|cable2|interface|energycore|regulator|monitor>");
+            case "chestlink" -> {
+                player.getInventory().addItem(plugin.buildChestLinkItem());
+                msg(player, "&aTu as recu un Nexus Chest Link.");
+            }
+            case "upgrade" -> {
+                int tier = 1;
+                if (args.length >= 3) {
+                    try {
+                        tier = Math.max(1, Math.min(3, Integer.parseInt(args[2])));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+                player.getInventory().addItem(plugin.buildUpgradeCrystal(tier));
+                msg(player, "&aTu as recu un Nexus Upgrade Crystal [Tier " + tier + "].");
+            }
+            default -> msg(player, "&cUsage: /nexus give <core|tablet|solarpanel|solarpanel2|capacitor|capacitor2|cable|cable2|interface|energycore|regulator|monitor|chestlink|upgrade [tier]>");
         }
     }
 
@@ -136,7 +151,9 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
             options.addAll(List.of("give", "upgrade", "access"));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
             options.addAll(List.of("core", "tablet", "solarpanel", "solarpanel2", "capacitor", "capacitor2",
-                    "cable", "cable2", "interface", "energycore", "regulator", "monitor"));
+                    "cable", "cable2", "interface", "energycore", "regulator", "monitor", "chestlink", "upgrade"));
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("give") && args[1].equalsIgnoreCase("upgrade")) {
+            options.addAll(List.of("1", "2", "3"));
         }
         return options.stream().filter(o -> o.startsWith(args[args.length - 1].toLowerCase())).toList();
     }

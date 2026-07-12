@@ -18,8 +18,17 @@ public class EconomyManager {
 
     public EconomyManager(Main plugin) {
         this.plugin = plugin;
-        this.enabled = plugin.getConfig().getBoolean("economy.enabled", true);
-        setupEconomy();
+        refresh();
+    }
+
+    /** Recharge l'etat (toggle config + presence reelle de Vault). Utilise par /nexusadmin toggle vault. */
+    public void refresh() {
+        this.enabled = plugin.getConfig().getBoolean("integrations.vault.enabled", true);
+        if (enabled) {
+            setupEconomy();
+        } else {
+            economy = null;
+        }
     }
 
     private boolean setupEconomy() {

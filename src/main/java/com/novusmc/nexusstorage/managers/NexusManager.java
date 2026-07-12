@@ -134,6 +134,10 @@ public class NexusManager {
         return coresYml.contains(keyFor(location));
     }
 
+    public int cachedNetworkCount() {
+        return networks.size();
+    }
+
     public void saveAll() {
         saveCoresFile();
         for (NexusNetwork network : networks.values()) {

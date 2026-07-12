@@ -12,6 +12,11 @@ commands:
     usage: /nexus [give|upgrade|access]
     permission: nexusstorage.use
     permission-message: "Tu n'as pas la permission d'utiliser NexusStorage."
+  nexusadmin:
+    description: Commandes d'administration de NexusStorage
+    usage: /nexusadmin [gui|reload|toggle|network|give]
+    permission: nexusstorage.admin
+    permission-message: "Tu n'as pas la permission d'utiliser les commandes admin NexusStorage."
 
 permissions:
   nexusstorage.use:

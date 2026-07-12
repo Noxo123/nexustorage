@@ -1,7 +1,13 @@
 # Configuration NexusStorage
 
+# Active/desactive les integrations externes (aussi modifiable en jeu via /nexusadmin toggle vault|itemsadder)
+integrations:
+  vault:
+    enabled: true
+  itemsadder:
+    enabled: false   # EN PREPARATION - n'a aucun effet tant que ce n'est pas implemente
+
 economy:
-  enabled: true
   cost-open-tablet: 0.0
   cost-change-page: 0.0
   cost-add-member: 50.0
@@ -46,6 +52,14 @@ energy:
   regulator:
     default-threshold: 20
 
+# Nexus Chest Link : connecte un coffre simple/double au stockage virtuel.
+chest-link:
+  tick-interval: 20
+  base-items-per-cycle: 1
+  # Chaque niveau d'upgrade (via Nexus Upgrade Crystal) ajoute ce nombre d'items/cycle.
+  items-per-upgrade-level: 1
+  max-upgrade-level: 3
+
 messages:
   no-network: "&cTu ne possedes pas encore de reseau Nexus. Pose un Nexus Core pour en creer un."
   no-access: "&cTu n'as pas la permission d'ouvrir ce reseau Nexus."
@@ -59,3 +73,11 @@ messages:
   notifications-toggled: "&aNotifications du reseau: &f{state}"
   core-required: "&cCe bloc doit etre connecte a un Nexus Energy Core pour fonctionner."
   low-energy: "&c⚡ Ton reseau '{name}' est en energie faible ({percent}%), les Interfaces sont en pause."
+  chestlink-placed: "&aNexus Chest Link connecte a ton reseau !"
+  chestlink-no-chest: "&cAucun coffre simple ou double adjacent trouve."
+  chestlink-upgraded: "&d✔ Chest Link ameliore au niveau {level} !"
+  chestlink-max-level: "&eCe Chest Link est deja au niveau maximum."
+  admin-no-permission: "&cTu n'as pas la permission d'utiliser les commandes admin NexusStorage."
+  admin-reloaded: "&aConfiguration NexusStorage rechargee."
+  admin-toggle: "&a{feature} est maintenant: &f{state}"
+  admin-network-not-found: "&cAucun reseau Nexus trouve pour ce joueur."

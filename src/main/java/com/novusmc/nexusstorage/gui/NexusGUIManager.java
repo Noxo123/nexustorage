@@ -2,6 +2,7 @@ package com.novusmc.nexusstorage.gui;
 
 import com.novusmc.nexusstorage.Main;
 import com.novusmc.nexusstorage.gui.holders.NexusAccessHolder;
+import com.novusmc.nexusstorage.gui.holders.NexusAdminHolder;
 import com.novusmc.nexusstorage.gui.holders.NexusEnergyHolder;
 import com.novusmc.nexusstorage.gui.holders.NexusMainHolder;
 import com.novusmc.nexusstorage.gui.holders.NexusSettingsHolder;
@@ -296,6 +297,45 @@ public class NexusGUIManager {
                 "&7Cables: &f" + graph.getCables().size(),
                 "&7Regulateurs: &f" + graph.getRegulators().size(),
                 "&7Moniteurs: &f" + graph.getMonitors().size()));
+
+        player.openInventory(inv);
+    }
+
+    // ================= ADMIN =================
+
+    public void openAdminMenu(Player player) {
+        NexusAdminHolder holder = new NexusAdminHolder();
+        Inventory inv = Bukkit.createInventory(holder, 36, ChatColor.translateAlternateColorCodes('&', "&4&lNexusStorage Admin"));
+        holder.setInventory(inv);
+
+        for (int i = 0; i < 36; i++) inv.setItem(i, filler());
+
+        boolean vaultOn = plugin.getEconomyManager().isEnabled();
+        inv.setItem(11, named(vaultOn ? Material.EMERALD_BLOCK : Material.REDSTONE_BLOCK,
+                "&6&lVault: " + (vaultOn ? "&aActive" : "&cDesactive"),
+                "&7Active/desactive tous les couts", "&7economiques du plugin.", "", "&aClique pour basculer"));
+
+        boolean iaWanted = plugin.getConfig().getBoolean("integrations.itemsadder.enabled", false);
+        boolean iaReady = plugin.getItemsAdderManager().isEnabled();
+        inv.setItem(13, named(iaWanted ? Material.EMERALD_BLOCK : Material.GRAY_DYE,
+                "&6&lItemsAdder: " + (iaWanted ? "&aActive" : "&7Desactive") + " &8(en preparation)",
+                "&7Plugin detecte: " + (plugin.getItemsAdderManager().isPluginPresent() ? "&aoui" : "&cnon"),
+                "&7Fonctionnel: " + (iaReady ? "&aoui" : "&cpas encore"),
+                "", "&aClique pour basculer le toggle"));
+
+        inv.setItem(15, named(Material.CLOCK, "&e&lReload config",
+                "&7Recharge config.yml et rafraichit", "&7les integrations Vault/ItemsAdder.",
+                "", "&aClique pour recharger"));
+
+        inv.setItem(20, named(Material.BOOK, "&b&lStats generales",
+                "&7Reseaux Nexus en cache: &f" + plugin.getNexusManager().cachedNetworkCount(),
+                "&7Blocs d'energie places: &f" + plugin.getEnergyManager().registrySize(),
+                "&7Chest Links places: &f" + plugin.getChestLinkManager().registrySize()));
+
+        inv.setItem(24, named(Material.PLAYER_HEAD, "&d&lGerer un joueur",
+                "&7Utilise &f/nexusadmin network <joueur>",
+                "&7pour voir/modifier son reseau.",
+                "&7(settier, wipe, kickall)"));
 
         player.openInventory(inv);
     }

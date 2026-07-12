@@ -3,6 +3,41 @@
 Plugin Minecraft Paper (1.21) indépendant, système de stockage interconnecté
 type "réseau" (Applied Energistics-like) mais vanilla-friendly.
 
+### Fix PlugMan / hot-reload
+`/nexus` et `/nexusadmin` sont maintenant enregistrés manuellement dans la
+CommandMap de Bukkit à chaque `onEnable()`, en écrasant de force toute
+ancienne entrée. Ça règle l'erreur `Cannot execute command ... plugin is
+disabled` qui apparaissait après un `/plugman unload` + `/plugman load`
+(Paper/Brigadier ne rafraîchit pas toujours proprement la commande sinon).
+
+### Nexus Chest Link (connecter des coffres existants)
+- `/nexus give chestlink` — pose ce bloc (Ender Chest) à côté d'un coffre
+  **simple ou double** pour le relier automatiquement à ton stockage Nexus
+  virtuel (aucune énergie requise, indépendant du système d'énergie).
+- `/nexus give upgrade [1-3]` — **Nexus Upgrade Crystal**, item premium très
+  cher. Clique droit sur un Chest Link pour l'améliorer (jusqu'à 3 niveaux,
+  chaque niveau transfère plus d'items par cycle — configurable dans
+  `chest-link` dans `config.yml`).
+
+### Toggles Vault / ItemsAdder
+- Vault peut être activé/désactivé à chaud : `/nexusadmin toggle vault`,
+  via le GUI admin, ou directement `integrations.vault.enabled` dans
+  `config.yml`.
+- ItemsAdder est **en préparation** : le toggle et la détection du plugin
+  existent déjà (`/nexusadmin toggle itemsadder`), mais aucun item/texture
+  custom n'est encore branché dessus — c'est une base prête pour une future
+  mise à jour.
+
+### Commandes admin `/nexusadmin`
+- `/nexusadmin gui` — tableau de bord stylé (toggles, stats, reload).
+- `/nexusadmin reload` — recharge `config.yml` à chaud.
+- `/nexusadmin toggle <vault|itemsadder>` — bascule une intégration.
+- `/nexusadmin network <joueur> [settier <1-5>|wipe|kickall]` — gère le
+  réseau de n'importe quel joueur.
+- `/nexusadmin give <joueur> <chestlink|upgrade> [tier]` — donne les items
+  premium à un joueur.
+- Permission : `nexusstorage.admin` (op par défaut).
+
 ## Fonctionnalités
 
 ### Stockage interconnecté

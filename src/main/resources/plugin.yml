@@ -1,0 +1,20 @@
+name: NexusStorage
+main: com.novusmc.nexusstorage.Main
+version: 1.0
+api-version: '1.21'
+author: NovusMC
+description: Systeme de stockage interconnecte SMP premium.
+softdepend: [Vault]
+
+commands:
+  nexus:
+    description: Commande principale de NexusStorage
+    usage: /nexus [give|upgrade|access]
+    permission: nexusstorage.use
+    permission-message: "Tu n'as pas la permission d'utiliser NexusStorage."
+
+permissions:
+  nexusstorage.use:
+    default: true
+  nexusstorage.admin:
+    default: op

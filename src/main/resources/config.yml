@@ -1,0 +1,61 @@
+# Configuration NexusStorage
+
+economy:
+  enabled: true
+  cost-open-tablet: 0.0
+  cost-change-page: 0.0
+  cost-add-member: 50.0
+
+upgrades:
+  tier1:
+    pages: 3
+    cost: 0.0
+  tier2:
+    pages: 10
+    cost: 5000.0
+  tier3:
+    pages: 50
+    cost: 20000.0
+  tier4:
+    pages: 200
+    cost: 75000.0
+  tier5:
+    pages: 1000
+    cost: 250000.0
+
+energy:
+  # Duree d'un cycle de simulation du reseau d'energie, en ticks serveur (20 = 1 seconde).
+  tick-interval: 20
+  solar_panel_basic:
+    production: 20
+  solar_panel_advanced:
+    production: 60
+    min-y: 100
+  capacitor_basic:
+    capacity: 10000
+  capacitor_advanced:
+    capacity: 100000
+  cable_basic:
+    loss-per-block: 0.02
+    max-length: 256
+  cable_insulated:
+    loss-per-block: 0.005
+    max-length: 512
+  interface_block:
+    energy-per-item: 5
+  regulator:
+    default-threshold: 20
+
+messages:
+  no-network: "&cTu ne possedes pas encore de reseau Nexus. Pose un Nexus Core pour en creer un."
+  no-access: "&cTu n'as pas la permission d'ouvrir ce reseau Nexus."
+  not-enough-money: "&cTu n'as pas assez d'argent."
+  core-created: "&aTon reseau Nexus a ete cree avec succes !"
+  member-added: "&aJoueur ajoute au reseau Nexus."
+  member-removed: "&aJoueur retire du reseau Nexus."
+  upgrade-success: "&aReseau ameliore avec succes !"
+  upgrade-max: "&eTon reseau est deja au niveau maximum."
+  network-renamed: "&aReseau renomme avec succes !"
+  notifications-toggled: "&aNotifications du reseau: &f{state}"
+  core-required: "&cCe bloc doit etre connecte a un Nexus Energy Core pour fonctionner."
+  low-energy: "&c⚡ Ton reseau '{name}' est en energie faible ({percent}%), les Interfaces sont en pause."

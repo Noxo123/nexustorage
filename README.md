@@ -5,6 +5,7 @@ type "réseau" (Applied Energistics-like) mais vanilla-friendly.
 
 ## Fonctionnalités
 
+### Stockage interconnecté
 - **Nexus Core** (`/nexus give core`) : un Lodestone spécial. Le poser crée
   ton réseau Nexus (ou en ajoute un point d'accès si tu en as déjà un).
 - **Nexus Tablet** (`/nexus give tablet`) : clic droit pour ouvrir le GUI
@@ -15,7 +16,38 @@ type "réseau" (Applied Energistics-like) mais vanilla-friendly.
   (lecture seule, dépôt, retrait, admin).
 - **Upgrades Vault** : 5 tiers (3 → 1000 pages), coûts configurables dans
   `config.yml`.
-- **GUI premium** avec Amethyst Shard, Compass, Book, Clock, Nether Star.
+
+### Système d'énergie Nexus (réseau physique de câbles, style RF/FE)
+10 blocs complexes, à obtenir via `/nexus give <type>` :
+
+| Type (`/nexus give ...`) | Bloc en jeu | Rôle |
+|---|---|---|
+| `energycore` | Beacon | Ancre un réseau physique de câbles à TON réseau Nexus (obligatoire) |
+| `solarpanel` | Sea Lantern | Génère de l'énergie le jour, si le ciel est visible |
+| `solarpanel2` | End Rod | Panneau avancé : plus de production, nécessite Y ≥ 100 |
+| `capacitor` | Copper Block | Stocke l'énergie (capacité de base) |
+| `capacitor2` | Netherite Block | Stocke beaucoup plus d'énergie |
+| `cable` | Iron Bars | Transporte l'énergie, légère perte par bloc |
+| `cable2` | Chain | Câble isolé, perte quasi nulle |
+| `interface` | Hopper | Consomme de l'énergie pour transférer des items entre un coffre adjacent et ton stockage Nexus virtuel |
+| `regulator` | Observer | Coupe les Interfaces si l'énergie stockée passe sous un seuil (clique pour ajuster, shift-clique pour baisser) |
+| `monitor` | Lecteur (Lectern) | Clic droit → tableau de bord temps réel du réseau physique local |
+
+La simulation tourne toutes les `energy.tick-interval` ticks (20 par défaut =
+1x/seconde) : elle reconstruit les réseaux connectés (BFS depuis chaque
+Energy Core), calcule la production solaire, applique la perte des câbles,
+remplit les capacitors, fait fonctionner les Interfaces et vérifie les
+Regulators.
+
+### GUI complet
+- **📦 Storage** — pages de stockage virtuel.
+- **👥 Access** — gestion des membres et permissions.
+- **💰 Upgrades** — achat des tiers.
+- **⚙ Settings** — infos réseau, stats d'énergie en direct, renommage du
+  réseau (saisie chat), notifications on/off, raccourci vers Access.
+- **⚡ Energy** — vue agrégée de tous tes réseaux physiques d'énergie
+  (capacité, stockage, production/consommation par cycle, machines).
+- **📱 Tablet Link** — infos rapides (owner, nombre de cores).
 
 ## Structure
 
@@ -23,11 +55,13 @@ type "réseau" (Applied Energistics-like) mais vanilla-friendly.
 src/main/java/com/novusmc/nexusstorage/
   Main.java
   managers/   NexusManager, NexusAccessManager, NexusStorageManager,
-              NexusUpgradeManager, EconomyManager
-  listeners/  NexusCoreListener, NexusTabletListener, NexusGUIListener
-  gui/        NexusGUIManager + holders/
+              NexusUpgradeManager, EconomyManager, EnergyManager
+  listeners/  NexusCoreListener, NexusTabletListener, NexusGUIListener,
+              EnergyListener
+  gui/        NexusGUIManager + holders/ (Main, Storage, Access, Upgrade,
+              Settings, Energy)
   commands/   NexusCommand
-  model/      NexusNetwork, AccessLevel
+  model/      NexusNetwork, AccessLevel, EnergyBlockType, EnergyGraph
 ```
 
 ## Compiler le plugin
@@ -53,6 +87,17 @@ pas besoin d'installer Vault à part, `paper-api` reste `provided`).
 
 Voir `src/main/resources/config.yml` pour les coûts Vault et les paliers
 d'upgrade (nombre de pages par tier).
+
+## Limites connues (système d'énergie)
+
+- La perte des câbles est calculée par une approximation globale sur le
+  nombre de câbles du réseau (plafonnée à 60%), pas un calcul exact par
+  chemin le plus court — suffisant pour du gameplay mais pas une simulation
+  physique parfaite.
+- Un bloc `interface` ne bouge qu'un seul item par cycle et prend le premier
+  coffre/conteneur adjacent trouvé.
+- Si deux `energycore` finissent connectés au même réseau physique, seul le
+  premier trouvé lors du parcours (BFS) récupère les blocs partagés.
 
 ## Notes techniques
 

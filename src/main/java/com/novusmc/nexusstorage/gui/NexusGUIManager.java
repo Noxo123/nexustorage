@@ -108,20 +108,29 @@ public class NexusGUIManager {
                 ChatColor.translateAlternateColorCodes('&', "&5Nexus Storage &7- Page " + (page + 1) + "/" + maxPages));
         holder.setInventory(inv);
 
-        renderStoragePage(inv, network.getOwner(), page, maxPages);
+        renderStoragePage(holder, page, maxPages);
         player.openInventory(inv);
     }
 
     /** Reconstruit le contenu affiche (slots 0-44 + navigation) d'une page de stockage compacte. */
-    private void renderStoragePage(Inventory inv, UUID owner, int page, int maxPages) {
+    private void renderStoragePage(NexusStorageHolder holder, int page, int maxPages) {
+        Inventory inv = holder.getInventory();
+        UUID owner = holder.getOwner();
         for (int i = 0; i < 54; i++) inv.setItem(i, null);
 
         List<StoredStack> entries = new ArrayList<>(plugin.getStorageManager().getEntries(owner).values());
         int start = page * 45;
         for (int i = 0; i < 45; i++) {
             int index = start + i;
-            if (index >= entries.size()) break;
+            if (index >= entries.size()) {
+                holder.setSlotSignature(i, null);
+                continue;
+            }
             StoredStack stack = entries.get(index);
+
+            // La signature "source de verite" est celle du TEMPLATE stocke, jamais recalculee
+            // depuis l'item affiche (qui porte un lore decoratif ajoute ci-dessous).
+            holder.setSlotSignature(i, plugin.getStorageManager().signatureOf(stack.getTemplate()));
 
             ItemStack display = stack.buildDisplayItem();
             ItemMeta meta = display.getItemMeta();
@@ -157,7 +166,7 @@ public class NexusGUIManager {
                 NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(owner);
                 maxPages = plugin.getUpgradeManager().getPagesForTier(network.getTier());
             }
-            renderStoragePage(online.getOpenInventory().getTopInventory(), owner, holder.getPage(), maxPages);
+            renderStoragePage(holder, holder.getPage(), maxPages);
         }
     }
 

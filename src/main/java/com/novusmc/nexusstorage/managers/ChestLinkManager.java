@@ -145,7 +145,8 @@ public class ChestLinkManager {
 
             int budget = base + record.upgradeLevel * perLevel;
             NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(record.owner);
-            int maxPages = plugin.getUpgradeManager().getPagesForTier(network.getTier());
+            int maxUniqueTypes = plugin.getUpgradeManager().getPagesForTier(network.getTier()) * 45;
+            boolean changed = false;
 
             for (int i = 0; i < budget; i++) {
                 ItemStack toMove = firstNonEmptySlot(chestInv);
@@ -153,10 +154,15 @@ public class ChestLinkManager {
 
                 ItemStack single = toMove.clone();
                 single.setAmount(1);
-                ItemStack leftover = plugin.getStorageManager().tryInsert(record.owner, maxPages, single);
-                if (leftover != null) break; // stockage plein, on s'arrete pour ce cycle
+                boolean absorbed = plugin.getStorageManager().deposit(record.owner, single, maxUniqueTypes);
+                if (!absorbed) break; // stockage plein (limite de types atteinte), on s'arrete pour ce cycle
 
                 toMove.setAmount(toMove.getAmount() - 1);
+                changed = true;
+            }
+
+            if (changed) {
+                plugin.getGuiManager().refreshStorageViewers(record.owner);
             }
         }
     }

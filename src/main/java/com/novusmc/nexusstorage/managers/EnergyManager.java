@@ -322,7 +322,7 @@ public class EnergyManager {
         double energyPerItem = plugin.getConfig().getDouble("energy.interface_block.energy-per-item", 5);
         double consumed = 0;
         NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(graph.getOwnerId());
-        int maxPages = plugin.getUpgradeManager().getPagesForTier(network.getTier());
+        int maxUniqueTypes = plugin.getUpgradeManager().getPagesForTier(network.getTier()) * 45;
 
         for (Location loc : graph.getInterfaces()) {
             Inventory adjacentInv = findAdjacentInventory(loc);
@@ -335,11 +335,14 @@ public class EnergyManager {
 
             ItemStack single = toMove.clone();
             single.setAmount(1);
-            ItemStack leftover = plugin.getStorageManager().tryInsert(graph.getOwnerId(), maxPages, single);
-            if (leftover == null) {
+            boolean absorbed = plugin.getStorageManager().deposit(graph.getOwnerId(), single, maxUniqueTypes);
+            if (absorbed) {
                 toMove.setAmount(toMove.getAmount() - 1);
                 consumed += energyPerItem;
             }
+        }
+        if (consumed > 0) {
+            plugin.getGuiManager().refreshStorageViewers(graph.getOwnerId());
         }
         return consumed;
     }

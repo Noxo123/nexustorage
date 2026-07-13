@@ -13,6 +13,7 @@ import com.novusmc.nexusstorage.managers.NexusUpgradeManager;
 import com.novusmc.nexusstorage.model.AccessLevel;
 import com.novusmc.nexusstorage.model.EnergyGraph;
 import com.novusmc.nexusstorage.model.NexusNetwork;
+import com.novusmc.nexusstorage.model.StoredStack;
 import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -24,6 +25,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -106,21 +108,57 @@ public class NexusGUIManager {
                 ChatColor.translateAlternateColorCodes('&', "&5Nexus Storage &7- Page " + (page + 1) + "/" + maxPages));
         holder.setInventory(inv);
 
-        ItemStack[] contents = plugin.getStorageManager().loadPage(network.getOwner(), page);
-        for (int i = 0; i < contents.length; i++) {
-            if (contents[i] != null) inv.setItem(i, contents[i]);
+        renderStoragePage(inv, network.getOwner(), page, maxPages);
+        player.openInventory(inv);
+    }
+
+    /** Reconstruit le contenu affiche (slots 0-44 + navigation) d'une page de stockage compacte. */
+    private void renderStoragePage(Inventory inv, UUID owner, int page, int maxPages) {
+        for (int i = 0; i < 54; i++) inv.setItem(i, null);
+
+        List<StoredStack> entries = new ArrayList<>(plugin.getStorageManager().getEntries(owner).values());
+        int start = page * 45;
+        for (int i = 0; i < 45; i++) {
+            int index = start + i;
+            if (index >= entries.size()) break;
+            StoredStack stack = entries.get(index);
+
+            ItemStack display = stack.buildDisplayItem();
+            ItemMeta meta = display.getItemMeta();
+            List<String> lore = new ArrayList<>();
+            if (meta.hasLore()) lore.addAll(meta.getLore());
+            lore.add(ChatColor.translateAlternateColorCodes('&', "&7Quantite: &f" + stack.getAmount()));
+            lore.add(ChatColor.translateAlternateColorCodes('&', "&7Clic: &f-1  &7| &7Shift+Clic droit: &f-10"));
+            meta.setLore(lore);
+            display.setItemMeta(meta);
+
+            inv.setItem(i, display);
         }
 
         for (int i = 45; i < 54; i++) inv.setItem(i, filler());
-        if (page > 0) {
-            inv.setItem(45, named(Material.ARROW, "&a« Page precedente"));
-        }
-        inv.setItem(49, named(Material.BOOK, "&fPage " + (page + 1) + "/" + maxPages));
-        if (page < maxPages - 1) {
-            inv.setItem(53, named(Material.ARROW, "&aPage suivante »"));
-        }
+        if (page > 0) inv.setItem(45, named(Material.ARROW, "&a« Page precedente"));
+        inv.setItem(49, named(Material.BOOK, "&fPage " + (page + 1) + "/" + maxPages,
+                "&7Types d'objets: &f" + entries.size() + " / " + (maxPages * 45)));
+        if (page < maxPages - 1) inv.setItem(53, named(Material.ARROW, "&aPage suivante »"));
+    }
 
-        player.openInventory(inv);
+    /**
+     * Rafraichit en temps reel toutes les sessions actuellement ouvertes sur le stockage
+     * d'un owner (ex: 2 joueurs regardant le meme reseau) apres une mutation, pour eviter
+     * qu'un viewer travaille sur un affichage perime (source de duplication d'items).
+     */
+    public void refreshStorageViewers(UUID owner) {
+        int maxPages = -1;
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (!(online.getOpenInventory().getTopInventory().getHolder() instanceof NexusStorageHolder holder)) continue;
+            if (!holder.getOwner().equals(owner)) continue;
+
+            if (maxPages < 0) {
+                NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(owner);
+                maxPages = plugin.getUpgradeManager().getPagesForTier(network.getTier());
+            }
+            renderStoragePage(online.getOpenInventory().getTopInventory(), owner, holder.getPage(), maxPages);
+        }
     }
 
     // ================= ACCESS =================

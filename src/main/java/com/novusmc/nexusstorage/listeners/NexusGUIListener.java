@@ -18,7 +18,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
@@ -74,17 +73,18 @@ public class NexusGUIListener implements Listener {
     @EventHandler
     public void onStorageClick(InventoryClickEvent event) {
         if (!(event.getInventory().getHolder() instanceof NexusStorageHolder holder)) return;
+        event.setCancelled(true); // GUI 100% manuel : on gere nous-memes deposit/withdraw
 
         int rawSlot = event.getRawSlot();
         boolean inTopInventory = rawSlot >= 0 && rawSlot < event.getInventory().getSize();
+        if (!inTopInventory) return; // clic dans l'inventaire du joueur : rien a faire ici
 
-        // Clic dans la rangee de navigation (slots 45-53) : toujours annule.
-        if (inTopInventory && rawSlot >= 45) {
-            event.setCancelled(true);
-            Player player = (Player) event.getWhoClicked();
-            NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(holder.getOwner());
+        Player player = (Player) event.getWhoClicked();
+        NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(holder.getOwner());
+
+        // --- Navigation (slots 45-53) ---
+        if (rawSlot >= 45) {
             int maxPages = plugin.getUpgradeManager().getPagesForTier(network.getTier());
-
             if (rawSlot == 45 && holder.getPage() > 0) {
                 double cost = plugin.getConfig().getDouble("economy.cost-change-page", 0.0);
                 if (plugin.getEconomyManager().withdraw(player, cost)) {
@@ -105,40 +105,51 @@ public class NexusGUIListener implements Listener {
             return;
         }
 
-        // Verification des permissions pour deposer / retirer dans la zone de stockage (slots 0-44).
-        NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(holder.getOwner());
-        Player player = (Player) event.getWhoClicked();
+        // --- Zone de stockage compacte (slots 0-44) ---
         AccessLevel level = network.getAccessFor(player.getUniqueId());
-        if (level == null) {
-            event.setCancelled(true);
-            return;
-        }
+        if (level == null) return;
 
-        if (inTopInventory) {
-            boolean placingItem = event.getCursor() != null && event.getCursor().getType() != Material.AIR;
-            boolean takingItem = event.getCurrentItem() != null && event.getCurrentItem().getType() != Material.AIR;
-            if (placingItem && !level.canDeposit()) {
-                event.setCancelled(true);
-            } else if (takingItem && !level.canWithdraw() && !placingItem) {
-                event.setCancelled(true);
+        int maxUniqueTypes = plugin.getUpgradeManager().getPagesForTier(network.getTier()) * 45;
+        ItemStack cursor = event.getCursor();
+        ItemStack clickedDisplay = event.getCurrentItem();
+        boolean cursorHasItem = cursor != null && cursor.getType() != Material.AIR;
+        boolean slotHasItem = clickedDisplay != null && clickedDisplay.getType() != Material.AIR;
+
+        if (cursorHasItem) {
+            // --- DEPOT : on pose le curseur entier dans une entree existante ou nouvelle ---
+            if (!level.canDeposit()) return;
+            if (slotHasItem && !plugin.getStorageManager().signatureOf(cursor).equals(plugin.getStorageManager().signatureOf(clickedDisplay))) {
+                return; // ne peut pas deposer un item different par-dessus une autre pile
             }
-        } else {
-            // Clic dans l'inventaire du joueur (shift-click vers le haut) : necessite le droit de deposer.
-            if (event.isShiftClick() && !level.canDeposit()) {
-                event.setCancelled(true);
+
+            boolean absorbed = plugin.getStorageManager().deposit(holder.getOwner(), cursor, maxUniqueTypes);
+            if (!absorbed) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                        "&cStockage plein : limite de types d'objets atteinte pour ce tier."));
+                return;
             }
+            event.getWhoClicked().setItemOnCursor(null);
+            plugin.getGuiManager().refreshStorageViewers(holder.getOwner());
+        } else if (slotHasItem) {
+            // --- RETRAIT : 1 par clic normal, 10 avec shift + clic droit ---
+            if (!level.canWithdraw()) return;
+
+            long requested = (event.isShiftClick() && event.isRightClick()) ? 10 : 1;
+            String signature = plugin.getStorageManager().signatureOf(clickedDisplay);
+            ItemStack withdrawn = plugin.getStorageManager().withdraw(holder.getOwner(), signature, requested);
+            if (withdrawn == null) return;
+
+            giveOrDrop(player, withdrawn);
+            plugin.getGuiManager().refreshStorageViewers(holder.getOwner());
         }
     }
 
-    @EventHandler
-    public void onInventoryClose(InventoryCloseEvent event) {
-        if (!(event.getInventory().getHolder() instanceof NexusStorageHolder holder)) return;
-
-        ItemStack[] contents = new ItemStack[45];
-        for (int i = 0; i < 45; i++) {
-            contents[i] = event.getInventory().getItem(i);
+    /** Donne l'item au joueur (inventaire), ou le fait tomber a ses pieds si son inventaire est plein. */
+    private void giveOrDrop(Player player, ItemStack item) {
+        Map<Integer, ItemStack> leftover = player.getInventory().addItem(item);
+        for (ItemStack extra : leftover.values()) {
+            player.getWorld().dropItemNaturally(player.getLocation(), extra);
         }
-        plugin.getStorageManager().savePage(holder.getOwner(), holder.getPage(), contents);
     }
 
     // ================= ACCESS =================

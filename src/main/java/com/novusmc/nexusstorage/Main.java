@@ -114,6 +114,9 @@ public class Main extends JavaPlugin {
         if (nexusManager != null) {
             nexusManager.saveAll();
         }
+        if (storageManager != null) {
+            storageManager.saveAll();
+        }
         if (energyManager != null) {
             energyManager.saveAll();
         }

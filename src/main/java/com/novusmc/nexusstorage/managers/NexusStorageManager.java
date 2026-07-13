@@ -1,27 +1,43 @@
 package com.novusmc.nexusstorage.managers;
 
 import com.novusmc.nexusstorage.Main;
+import com.novusmc.nexusstorage.model.StoredStack;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.enchantments.Enchantment;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * Gere le stockage virtuel interconnecte : chaque reseau Nexus dispose de
- * plusieurs "pages" (jusqu'a 1000 selon le tier), chaque page contenant
- * 45 slots de stockage utilisables (les 9 slots du bas servent a la navigation).
+ * Moteur de stockage virtuel Nexus - VERSION COMPACTEE.
+ *
+ * Chaque type d'item unique (materiau + meta : nom, lore, enchants, custom
+ * model data) est stocke sous forme d'UNE seule entree avec une quantite
+ * (long), sans limite pratique de stack (69, 1000, 1000000...). C'est le
+ * meme principe qu'un terminal de stockage AE2/RS : on ne "voit" jamais un
+ * slot vide reserve, seulement la liste des types d'items presents.
+ *
+ * Les donnees sont gardees EN MEMOIRE (Map live) apres le premier chargement
+ * et modifiees directement par toutes les operations (deposit/withdraw),
+ * sauvegardees a chaque mutation. Comme tous les viewers d'un meme reseau
+ * lisent/ecrivent la MEME instance de map, il n'y a plus de risque de
+ * duplication par double-ouverture (contrairement a un systeme qui chargerait
+ * une copie independante a chaque ouverture de GUI et l'ecrirait a la fermeture).
  */
 public class NexusStorageManager {
 
-    public static final int STORAGE_SLOTS_PER_PAGE = 45; // slots 0..44
-
     private final Main plugin;
     private final File storageFolder;
+
+    /** owner -> (signature -> StoredStack). LinkedHashMap = ordre d'insertion stable pour la pagination. */
+    private final Map<UUID, LinkedHashMap<String, StoredStack>> cache = new java.util.HashMap<>();
 
     public NexusStorageManager(Main plugin) {
         this.plugin = plugin;
@@ -31,124 +47,145 @@ public class NexusStorageManager {
         }
     }
 
-    private File pageFile(UUID owner, int page) {
-        File ownerFolder = new File(storageFolder, owner.toString());
-        if (!ownerFolder.exists()) {
-            ownerFolder.mkdirs();
-        }
-        return new File(ownerFolder, "page_" + page + ".yml");
+    private File fileFor(UUID owner) {
+        return new File(storageFolder, owner.toString() + ".yml");
     }
 
+    // ================= SIGNATURE =================
+
     /**
-     * Charge le contenu (45 slots) d'une page de stockage depuis le disque.
-     * Retourne un tableau vide si la page n'existe pas encore.
+     * Construit une signature stable pour regrouper les items identiques
+     * (meme materiau, meme nom, meme lore, memes enchants, meme custom model data).
+     * Deux items avec la meme signature sont fusionnes dans la meme StoredStack.
      */
-    public ItemStack[] loadPage(UUID owner, int page) {
-        ItemStack[] contents = new ItemStack[STORAGE_SLOTS_PER_PAGE];
-        File file = pageFile(owner, page);
-        if (!file.exists()) {
-            return contents;
-        }
-        YamlConfiguration yml = YamlConfiguration.loadConfiguration(file);
-        List<?> rawList = yml.getList("items");
-        if (rawList != null) {
-            for (int i = 0; i < Math.min(rawList.size(), STORAGE_SLOTS_PER_PAGE); i++) {
-                Object obj = rawList.get(i);
-                if (obj instanceof ItemStack item) {
-                    contents[i] = item;
+    public String signatureOf(ItemStack item) {
+        StringBuilder sb = new StringBuilder(item.getType().name());
+        if (item.hasItemMeta()) {
+            ItemMeta meta = item.getItemMeta();
+            if (meta.hasDisplayName()) sb.append("|dn:").append(meta.getDisplayName());
+            if (meta.hasLore()) sb.append("|lore:").append(String.join(",", meta.getLore()));
+            if (meta.hasEnchants()) {
+                TreeMap<String, Integer> sorted = new TreeMap<>();
+                for (Map.Entry<Enchantment, Integer> e : meta.getEnchants().entrySet()) {
+                    sorted.put(e.getKey().getKey().toString(), e.getValue());
                 }
+                sb.append("|ench:").append(sorted);
             }
+            if (meta.hasCustomModelData()) sb.append("|cmd:").append(meta.getCustomModelData());
         }
-        return contents;
+        return sb.toString();
+    }
+
+    // ================= ACCES / CACHE =================
+
+    /** Retourne la map LIVE des entrees d'un owner (chargee depuis le disque au premier appel). */
+    public LinkedHashMap<String, StoredStack> getEntries(UUID owner) {
+        return cache.computeIfAbsent(owner, this::loadFromDisk);
+    }
+
+    public int uniqueTypeCount(UUID owner) {
+        return getEntries(owner).size();
+    }
+
+    // ================= DEPOSIT / WITHDRAW =================
+
+    /**
+     * Depose un item (son amount complet) dans le stockage compacte d'un owner.
+     *
+     * @param maxUniqueTypes limite de types d'items differents autorises (lie au tier du reseau)
+     * @return true si tout l'item a ete absorbe, false si refuse (limite de types atteinte pour un NOUVEL item)
+     */
+    public boolean deposit(UUID owner, ItemStack item, int maxUniqueTypes) {
+        if (item == null || item.getAmount() <= 0) return true;
+
+        LinkedHashMap<String, StoredStack> entries = getEntries(owner);
+        String sig = signatureOf(item);
+        StoredStack existing = entries.get(sig);
+
+        if (existing == null) {
+            if (entries.size() >= maxUniqueTypes) {
+                return false; // limite de types d'items atteinte
+            }
+            entries.put(sig, new StoredStack(item, item.getAmount()));
+        } else {
+            existing.add(item.getAmount());
+        }
+
+        save(owner);
+        return true;
     }
 
     /**
-     * Sauvegarde le contenu (45 slots) d'une page de stockage sur le disque.
-     * N'ecrit rien si la page est totalement vide et n'existait pas deja,
-     * pour eviter de creer des milliers de fichiers inutiles.
+     * Retire jusqu'a `amount` unites du type identifie par sa signature.
+     * @return l'ItemStack effectivement retire (peut etre moins que demande), ou null si l'entree n'existe pas / est vide.
      */
-    public void savePage(UUID owner, int page, ItemStack[] contents) {
-        boolean empty = true;
-        List<ItemStack> toSave = new ArrayList<>();
-        for (ItemStack item : contents) {
-            toSave.add(item);
-            if (item != null && item.getType() != org.bukkit.Material.AIR) {
-                empty = false;
+    public ItemStack withdraw(UUID owner, String signature, long amount) {
+        LinkedHashMap<String, StoredStack> entries = getEntries(owner);
+        StoredStack stack = entries.get(signature);
+        if (stack == null) return null;
+
+        ItemStack result = stack.withdraw(amount);
+        if (stack.getAmount() <= 0) {
+            entries.remove(signature);
+        }
+        save(owner);
+        return result;
+    }
+
+    // ================= PERSISTENCE =================
+
+    private LinkedHashMap<String, StoredStack> loadFromDisk(UUID owner) {
+        LinkedHashMap<String, StoredStack> entries = new LinkedHashMap<>();
+        File file = fileFor(owner);
+        if (!file.exists()) return entries;
+
+        YamlConfiguration yml = YamlConfiguration.loadConfiguration(file);
+        for (String key : yml.getKeys(false)) {
+            try {
+                ItemStack template = yml.getItemStack(key + ".item");
+                long amount = yml.getLong(key + ".amount", 0);
+                if (template == null || amount <= 0) continue;
+                entries.put(signatureOf(template), new StoredStack(template, amount));
+            } catch (Exception e) {
+                plugin.getLogger().warning("Entree de stockage invalide ignoree pour " + owner + ": " + key);
             }
         }
+        return entries;
+    }
 
-        File file = pageFile(owner, page);
-        if (empty && !file.exists()) {
+    public void save(UUID owner) {
+        LinkedHashMap<String, StoredStack> entries = cache.get(owner);
+        File file = fileFor(owner);
+
+        if (entries == null || entries.isEmpty()) {
+            if (file.exists()) file.delete();
             return;
         }
 
         YamlConfiguration yml = new YamlConfiguration();
-        yml.set("items", toSave);
+        int index = 0;
+        for (StoredStack stack : entries.values()) {
+            String key = "entry_" + (index++);
+            yml.set(key + ".item", stack.getTemplate());
+            yml.set(key + ".amount", stack.getAmount());
+        }
         try {
             yml.save(file);
         } catch (IOException e) {
-            plugin.getLogger().log(Level.SEVERE, "Impossible de sauvegarder la page " + page + " de " + owner, e);
+            plugin.getLogger().log(Level.SEVERE, "Impossible de sauvegarder le stockage de " + owner, e);
         }
     }
 
-    /**
-     * Tente d'inserer un item dans le stockage virtuel d'un owner, en fusionnant
-     * d'abord dans les piles existantes puis en utilisant des slots vides,
-     * en parcourant les pages disponibles dans l'ordre. Utilise par
-     * les Interface Block du systeme d'energie.
-     *
-     * @return null si tout l'item a ete insere, sinon l'ItemStack restant non place.
-     */
-    public ItemStack tryInsert(UUID owner, int maxPages, ItemStack item) {
-        ItemStack remaining = item.clone();
-
-        for (int page = 0; page < maxPages && remaining != null; page++) {
-            ItemStack[] contents = loadPage(owner, page);
-            boolean changed = false;
-
-            for (int i = 0; i < contents.length && remaining != null; i++) {
-                ItemStack slot = contents[i];
-                if (slot != null && slot.isSimilar(remaining)) {
-                    int space = slot.getMaxStackSize() - slot.getAmount();
-                    if (space > 0) {
-                        int move = Math.min(space, remaining.getAmount());
-                        slot.setAmount(slot.getAmount() + move);
-                        remaining.setAmount(remaining.getAmount() - move);
-                        changed = true;
-                        if (remaining.getAmount() <= 0) remaining = null;
-                    }
-                }
-            }
-
-            if (remaining != null) {
-                for (int i = 0; i < contents.length && remaining != null; i++) {
-                    if (contents[i] == null) {
-                        contents[i] = remaining;
-                        remaining = null;
-                        changed = true;
-                    }
-                }
-            }
-
-            if (changed) {
-                savePage(owner, page, contents);
-            }
+    public void saveAll() {
+        for (UUID owner : cache.keySet()) {
+            save(owner);
         }
-
-        return remaining;
     }
 
-    /**
-     * Supprime completement le stockage d'un owner (toutes ses pages).
-     */
+    /** Supprime completement le stockage d'un owner. */
     public void deleteAll(UUID owner) {
-        File ownerFolder = new File(storageFolder, owner.toString());
-        if (ownerFolder.exists()) {
-            File[] files = ownerFolder.listFiles();
-            if (files != null) {
-                for (File f : files) f.delete();
-            }
-            ownerFolder.delete();
-        }
+        cache.remove(owner);
+        File file = fileFor(owner);
+        if (file.exists()) file.delete();
     }
 }

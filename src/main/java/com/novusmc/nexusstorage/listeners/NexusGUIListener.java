@@ -118,7 +118,8 @@ public class NexusGUIListener implements Listener {
         if (cursorHasItem) {
             // --- DEPOT : on pose le curseur entier dans une entree existante ou nouvelle ---
             if (!level.canDeposit()) return;
-            if (slotHasItem && !plugin.getStorageManager().signatureOf(cursor).equals(plugin.getStorageManager().signatureOf(clickedDisplay))) {
+            String slotSig = holder.getSlotSignature(rawSlot);
+            if (slotSig != null && !plugin.getStorageManager().signatureOf(cursor).equals(slotSig)) {
                 return; // ne peut pas deposer un item different par-dessus une autre pile
             }
 
@@ -134,8 +135,10 @@ public class NexusGUIListener implements Listener {
             // --- RETRAIT : 1 par clic normal, 10 avec shift + clic droit ---
             if (!level.canWithdraw()) return;
 
+            String signature = holder.getSlotSignature(rawSlot);
+            if (signature == null) return;
+
             long requested = (event.isShiftClick() && event.isRightClick()) ? 10 : 1;
-            String signature = plugin.getStorageManager().signatureOf(clickedDisplay);
             ItemStack withdrawn = plugin.getStorageManager().withdraw(holder.getOwner(), signature, requested);
             if (withdrawn == null) return;
 

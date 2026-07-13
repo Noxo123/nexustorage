@@ -1,13 +1,7 @@
 package com.novusmc.nexusstorage.listeners;
 
 import com.novusmc.nexusstorage.Main;
-import com.novusmc.nexusstorage.gui.holders.NexusAccessHolder;
-import com.novusmc.nexusstorage.gui.holders.NexusAdminHolder;
-import com.novusmc.nexusstorage.gui.holders.NexusEnergyHolder;
-import com.novusmc.nexusstorage.gui.holders.NexusMainHolder;
-import com.novusmc.nexusstorage.gui.holders.NexusSettingsHolder;
-import com.novusmc.nexusstorage.gui.holders.NexusStorageHolder;
-import com.novusmc.nexusstorage.gui.holders.NexusUpgradeHolder;
+import com.novusmc.nexusstorage.gui.holders.*;
 import com.novusmc.nexusstorage.model.AccessLevel;
 import com.novusmc.nexusstorage.model.NexusNetwork;
 import net.md_5.bungee.api.ChatColor;
@@ -17,6 +11,8 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.inventory.ItemStack;
@@ -58,6 +54,14 @@ public class NexusGUIListener implements Listener {
         Player player = (Player) event.getWhoClicked();
         NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(holder.getOwner());
 
+        // Vérification d'accès de base au menu principal
+        AccessLevel level = network.getAccessFor(player.getUniqueId());
+        if (level == null && !player.getUniqueId().equals(network.getOwner())) {
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous n'avez pas accès à ce réseau."));
+            player.closeInventory();
+            return;
+        }
+
         switch (clicked.getType()) {
             case AMETHYST_SHARD -> plugin.getGuiManager().openStoragePage(player, network, 0);
             case PLAYER_HEAD -> plugin.getGuiManager().openAccessMenu(player, network);
@@ -73,42 +77,90 @@ public class NexusGUIListener implements Listener {
     @EventHandler
     public void onStorageClick(InventoryClickEvent event) {
         if (!(event.getInventory().getHolder() instanceof NexusStorageHolder holder)) return;
-        event.setCancelled(true); // GUI 100% manuel : on gere nous-memes deposit/withdraw
-
-        int rawSlot = event.getRawSlot();
-        boolean inTopInventory = rawSlot >= 0 && rawSlot < event.getInventory().getSize();
-        if (!inTopInventory) return; // clic dans l'inventaire du joueur : rien a faire ici
+        
+        // Bloquer l'interaction par défaut immédiatement (Anti-Duplication)
+        event.setCancelled(true); 
 
         Player player = (Player) event.getWhoClicked();
         NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(holder.getOwner());
+        AccessLevel level = network.getAccessFor(player.getUniqueId());
 
-        // --- Navigation (slots 45-53) ---
-        if (rawSlot >= 45) {
+        // Protection : S'il n'a aucun droit et n'est pas le proprio, dehors.
+        if (level == null && !player.getUniqueId().equals(network.getOwner())) {
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous n'avez pas accès à ce stockage."));
+            player.closeInventory();
+            return;
+        }
+
+        ClickType clickType = event.getClick();
+        InventoryAction action = event.getAction();
+        int rawSlot = event.getRawSlot();
+        boolean inTopInventory = rawSlot >= 0 && rawSlot < event.getInventory().getSize();
+
+        // 🛑 ANTI-DUPLICATION : Interdire TOUTES les actions et clics complexes pouvant contourner les limites
+        if (clickType == ClickType.NUMBER_KEY || 
+            clickType == ClickType.DOUBLE_CLICK || 
+            clickType == ClickType.SWAP_OFFHAND || 
+            action == InventoryAction.COLLECT_TO_CURSOR || 
+            action == InventoryAction.DROP_ALL_CURSOR || 
+            action == InventoryAction.DROP_ALL_SLOT || 
+            action == InventoryAction.DROP_ONE_CURSOR || 
+            action == InventoryAction.DROP_ONE_SLOT) {
+            return;
+        }
+
+        // --- Navigation ou Actions dans le TOP Inventory (slots 45-53) ---
+        if (inTopInventory && rawSlot >= 45) {
             int maxPages = plugin.getUpgradeManager().getPagesForTier(network.getTier());
             if (rawSlot == 45 && holder.getPage() > 0) {
                 double cost = plugin.getConfig().getDouble("economy.cost-change-page", 0.0);
                 if (plugin.getEconomyManager().withdraw(player, cost)) {
                     plugin.getGuiManager().openStoragePage(player, network, holder.getPage() - 1);
                 } else {
-                    player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                            plugin.getConfig().getString("messages.not-enough-money")));
+                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.not-enough-money")));
                 }
             } else if (rawSlot == 53 && holder.getPage() < maxPages - 1) {
                 double cost = plugin.getConfig().getDouble("economy.cost-change-page", 0.0);
                 if (plugin.getEconomyManager().withdraw(player, cost)) {
                     plugin.getGuiManager().openStoragePage(player, network, holder.getPage() + 1);
                 } else {
-                    player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                            plugin.getConfig().getString("messages.not-enough-money")));
+                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.not-enough-money")));
                 }
             }
             return;
         }
 
-        // --- Zone de stockage compacte (slots 0-44) ---
-        AccessLevel level = network.getAccessFor(player.getUniqueId());
-        if (level == null) return;
+        // --- Clic dans l'INVENTAIRE DU JOUEUR (Dépôt rapide ou clic standard) ---
+        if (!inTopInventory) {
+            // Seul le SHIFT_LEFT / SHIFT_RIGHT (Dépôt rapide) nous intéresse depuis l'inventaire du bas
+            if (clickType == ClickType.SHIFT_LEFT || clickType == ClickType.SHIFT_RIGHT) {
+                if (level != null && !level.canDeposit() && !player.getUniqueId().equals(network.getOwner())) {
+                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous n'avez pas la permission de déposer."));
+                    return;
+                }
+                
+                ItemStack clickedItem = event.getCurrentItem();
+                if (clickedItem == null || clickedItem.getType() == Material.AIR) return;
 
+                int maxUniqueTypes = plugin.getUpgradeManager().getPagesForTier(network.getTier()) * 45;
+                
+                // Clone pour éviter des modifications mutables asynchrones pendant le process
+                ItemStack toDeposit = clickedItem.clone();
+                boolean absorbed = plugin.getStorageManager().deposit(holder.getOwner(), toDeposit, maxUniqueTypes);
+                
+                if (!absorbed) {
+                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cStockage plein : limite atteinte ou item incompatible."));
+                    return;
+                }
+                
+                // Mettre à jour l'item du joueur de manière sécurisée
+                event.setCurrentItem(null);
+                plugin.getGuiManager().refreshStorageViewers(holder.getOwner());
+            }
+            return; // On ignore les autres types de clics simples dans l'inventaire du joueur
+        }
+
+        // --- Zone de stockage compacte TOP INVENTORY (slots 0-44) ---
         int maxUniqueTypes = plugin.getUpgradeManager().getPagesForTier(network.getTier()) * 45;
         ItemStack cursor = event.getCursor();
         ItemStack clickedDisplay = event.getCurrentItem();
@@ -116,29 +168,47 @@ public class NexusGUIListener implements Listener {
         boolean slotHasItem = clickedDisplay != null && clickedDisplay.getType() != Material.AIR;
 
         if (cursorHasItem) {
-            // --- DEPOT : on pose le curseur entier dans une entree existante ou nouvelle ---
-            if (!level.canDeposit()) return;
-            String slotSig = holder.getSlotSignature(rawSlot);
-            if (slotSig != null && !plugin.getStorageManager().signatureOf(cursor).equals(slotSig)) {
-                return; // ne peut pas deposer un item different par-dessus une autre pile
-            }
-
-            boolean absorbed = plugin.getStorageManager().deposit(holder.getOwner(), cursor, maxUniqueTypes);
-            if (!absorbed) {
-                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&cStockage plein : limite de types d'objets atteinte pour ce tier."));
+            // --- ACTION : DEPOT DEPUISE LE CURSEUR ---
+            if (level != null && !level.canDeposit() && !player.getUniqueId().equals(network.getOwner())) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous n'avez pas la permission de déposer."));
                 return;
             }
+
+            String slotSig = holder.getSlotSignature(rawSlot);
+            if (slotSig != null && !plugin.getStorageManager().signatureOf(cursor).equals(slotSig)) {
+                return; // Anti-overwrite : Impossible d'écraser un slot existant différent
+            }
+
+            ItemStack toDeposit = cursor.clone();
+            boolean absorbed = plugin.getStorageManager().deposit(holder.getOwner(), toDeposit, maxUniqueTypes);
+            if (!absorbed) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cStockage plein : limite de types d'objets atteinte pour ce tier."));
+                return;
+            }
+            
             event.getWhoClicked().setItemOnCursor(null);
             plugin.getGuiManager().refreshStorageViewers(holder.getOwner());
+
         } else if (slotHasItem) {
-            // --- RETRAIT : 1 par clic normal, 10 avec shift + clic droit ---
-            if (!level.canWithdraw()) return;
+            // --- ACTION : RETRAIT ---
+            if (level != null && !level.canWithdraw() && !player.getUniqueId().equals(network.getOwner())) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous n'avez pas la permission de retirer."));
+                return;
+            }
 
             String signature = holder.getSlotSignature(rawSlot);
             if (signature == null) return;
 
-            long requested = (event.isShiftClick() && event.isRightClick()) ? 10 : 1;
+            // Déterminer la quantité demandée selon le clic de manière ultra-strict
+            long requested = 1;
+            if (clickType == ClickType.SHIFT_LEFT || clickType == ClickType.SHIFT_RIGHT) {
+                requested = 64; // Stack complet avec Shift
+            } else if (clickType == ClickType.RIGHT) {
+                requested = 1; // Unité via clic droit
+            } else if (clickType != ClickType.LEFT) {
+                return; // Bloque tout autre type de clic exotique
+            }
+
             ItemStack withdrawn = plugin.getStorageManager().withdraw(holder.getOwner(), signature, requested);
             if (withdrawn == null) return;
 
@@ -168,29 +238,39 @@ public class NexusGUIListener implements Listener {
 
         Player player = (Player) event.getWhoClicked();
         NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(holder.getOwner());
+        AccessLevel viewerLevel = network.getAccessFor(player.getUniqueId());
 
-        if (!player.getUniqueId().equals(network.getOwner())) {
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cSeul le proprietaire peut gerer les acces."));
+        // 🛡️ SECURISATION : Seul le Propriétaire ou un ADMIN peut modifier les accès
+        if (!player.getUniqueId().equals(network.getOwner()) && viewerLevel != AccessLevel.ADMIN) {
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cSeul le propriétaire ou un administrateur peut gérer les accès."));
             return;
         }
 
         if (clicked.getType() == Material.EMERALD) {
             pendingAddMember.put(player.getUniqueId(), network.getOwner());
             player.closeInventory();
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    "&aTape le pseudo du joueur a ajouter dans le chat (ou 'annuler')."));
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&aTape le pseudo du joueur a ajouter dans le chat (ou 'annuler')."));
             return;
         }
 
-        if (clicked.getType() == Material.PLAYER_HEAD && clicked.getItemMeta() instanceof SkullMeta skullMeta
-                && skullMeta.getOwningPlayer() != null) {
+        if (clicked.getType() == Material.PLAYER_HEAD && clicked.getItemMeta() instanceof SkullMeta skullMeta && skullMeta.getOwningPlayer() != null) {
             OfflinePlayer target = skullMeta.getOwningPlayer();
             UUID targetId = target.getUniqueId();
 
+            // Interdire de s'auto-modifier ses propres permissions si on est Admin (seul le Owner peut toucher à l'admin)
+            if (targetId.equals(player.getUniqueId())) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous ne pouvez pas modifier vos propres permissions."));
+                return;
+            }
+            // Protéger le Owner : on ne peut pas modifier le rang du propriétaire du réseau
+            if (targetId.equals(network.getOwner())) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cImpossible de modifier les droits du propriétaire."));
+                return;
+            }
+
             if (event.isRightClick()) {
                 plugin.getAccessManager().removeMember(network, targetId);
-                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        plugin.getConfig().getString("messages.member-removed")));
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.member-removed")));
             } else {
                 AccessLevel current = network.getAccessFor(targetId);
                 AccessLevel next = switch (current == null ? AccessLevel.READ_ONLY : current) {
@@ -200,8 +280,7 @@ public class NexusGUIListener implements Listener {
                     case ADMIN -> AccessLevel.READ_ONLY;
                 };
                 plugin.getAccessManager().addMember(network, targetId, next);
-                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&aPermission de " + target.getName() + " changee en: &f" + next.getLabel()));
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&aPermission de " + target.getName() + " changee en: &f" + next.getLabel()));
             }
             plugin.getGuiManager().openAccessMenu(player, network);
         }
@@ -242,15 +321,13 @@ public class NexusGUIListener implements Listener {
 
             double cost = plugin.getConfig().getDouble("economy.cost-add-member", 0.0);
             if (!plugin.getEconomyManager().withdraw(player, cost)) {
-                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        plugin.getConfig().getString("messages.not-enough-money")));
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.not-enough-money")));
                 return;
             }
 
             NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(ownerId);
             plugin.getAccessManager().addMember(network, target.getUniqueId(), AccessLevel.READ_ONLY);
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    plugin.getConfig().getString("messages.member-added")));
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.member-added")));
         });
     }
 
@@ -268,8 +345,7 @@ public class NexusGUIListener implements Listener {
             NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(ownerId);
             network.setName(message);
             plugin.getAccessManager().saveNetworkMeta(network);
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    plugin.getConfig().getString("messages.network-renamed")));
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.network-renamed")));
         });
     }
 
@@ -286,9 +362,11 @@ public class NexusGUIListener implements Listener {
 
         Player player = (Player) event.getWhoClicked();
         NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(holder.getOwner());
+        AccessLevel viewerLevel = network.getAccessFor(player.getUniqueId());
 
-        if (!player.getUniqueId().equals(network.getOwner())) {
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cSeul le proprietaire peut modifier les settings."));
+        // 🛡️ SECURISATION SETTINGS : Seul Owner ou ADMIN
+        if (!player.getUniqueId().equals(network.getOwner()) && viewerLevel != AccessLevel.ADMIN) {
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cSeul le proprietaire ou un admin peut modifier les paramètres."));
             return;
         }
 
@@ -296,15 +374,13 @@ public class NexusGUIListener implements Listener {
             case 19 -> {
                 pendingRename.put(player.getUniqueId(), network.getOwner());
                 player.closeInventory();
-                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&aTape le nouveau nom du reseau dans le chat (ou 'annuler')."));
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&aTape le nouveau nom du reseau dans le chat (ou 'annuler')."));
             }
             case 21 -> {
                 network.setNotificationsEnabled(!network.isNotificationsEnabled());
                 plugin.getAccessManager().saveNetworkMeta(network);
                 String state = network.isNotificationsEnabled() ? "&aActivees" : "&cDesactivees";
-                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        plugin.getConfig().getString("messages.notifications-toggled", "").replace("{state}", state)));
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.notifications-toggled", "").replace("{state}", state)));
                 plugin.getGuiManager().openSettingsMenu(player, network);
             }
             case 23 -> plugin.getGuiManager().openAccessMenu(player, network);
@@ -330,7 +406,11 @@ public class NexusGUIListener implements Listener {
         if (event.getClickedInventory() == null || event.getClickedInventory().getHolder() != holder) return;
 
         Player player = (Player) event.getWhoClicked();
-        if (!player.hasPermission("nexusstorage.admin")) return;
+        if (!player.hasPermission("nexusstorage.admin")) {
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous n'avez pas la permission administrateur."));
+            player.closeInventory();
+            return;
+        }
 
         switch (event.getSlot()) {
             case 11 -> {
@@ -351,8 +431,7 @@ public class NexusGUIListener implements Listener {
                 plugin.reloadConfig();
                 plugin.getEconomyManager().refresh();
                 plugin.getItemsAdderManager().refresh();
-                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        plugin.getConfig().getString("messages.admin-reloaded")));
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.admin-reloaded")));
                 plugin.getGuiManager().openAdminMenu(player);
             }
             default -> {}
@@ -372,21 +451,20 @@ public class NexusGUIListener implements Listener {
 
         Player player = (Player) event.getWhoClicked();
         NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(holder.getOwner());
+        AccessLevel viewerLevel = network.getAccessFor(player.getUniqueId());
 
-        if (!player.getUniqueId().equals(network.getOwner())) {
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cSeul le proprietaire peut ameliorer le reseau."));
+        // 🛡️ SECURISATION UPGRADES : Seul Owner ou ADMIN peut faire évoluer le système
+        if (!player.getUniqueId().equals(network.getOwner()) && viewerLevel != AccessLevel.ADMIN) {
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cSeul le proprietaire ou un administrateur peut ameliorer le reseau."));
             return;
         }
 
         if (plugin.getUpgradeManager().upgrade(player, network)) {
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    plugin.getConfig().getString("messages.upgrade-success")));
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.upgrade-success")));
         } else if (plugin.getUpgradeManager().isMaxTier(network)) {
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    plugin.getConfig().getString("messages.upgrade-max")));
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.upgrade-max")));
         } else {
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    plugin.getConfig().getString("messages.not-enough-money")));
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.not-enough-money")));
         }
         plugin.getGuiManager().openUpgradeMenu(player, network);
     }

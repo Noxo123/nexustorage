@@ -2,6 +2,7 @@ package com.novusmc.nexusstorage.listeners;
 
 import com.novusmc.nexusstorage.Main;
 import com.novusmc.nexusstorage.gui.holders.*;
+import com.novusmc.nexusstorage.managers.EnergyMarketManager;
 import com.novusmc.nexusstorage.model.AccessLevel;
 import com.novusmc.nexusstorage.model.NexusNetwork;
 import net.md_5.bungee.api.ChatColor;
@@ -30,6 +31,8 @@ import java.util.UUID;
 public class NexusGUIListener implements Listener {
 
     private final Main plugin;
+    // UUID joueur -> UUID owner du réseau, en attente de saisie recherche
+    private final java.util.Map<java.util.UUID, java.util.UUID> pendingSearch = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Joueurs en attente de taper un pseudo dans le chat pour ajouter un membre. Valeur = owner du reseau cible. */
     private final Map<UUID, UUID> pendingAddMember = new HashMap<>();
@@ -112,6 +115,8 @@ public class NexusGUIListener implements Listener {
         // --- Navigation ou Actions dans le TOP Inventory (slots 45-53) ---
         if (inTopInventory && rawSlot >= 45) {
             int maxPages = plugin.getUpgradeManager().getPagesForTier(network.getTier());
+
+            // Slot 45 : page précédente
             if (rawSlot == 45 && holder.getPage() > 0) {
                 double cost = plugin.getConfig().getDouble("economy.cost-change-page", 0.0);
                 if (plugin.getEconomyManager().withdraw(player, cost)) {
@@ -119,12 +124,57 @@ public class NexusGUIListener implements Listener {
                 } else {
                     player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.not-enough-money")));
                 }
-            } else if (rawSlot == 53 && holder.getPage() < maxPages - 1) {
+            }
+            // Slot 53 : page suivante
+            else if (rawSlot == 53 && holder.getPage() < maxPages - 1) {
                 double cost = plugin.getConfig().getDouble("economy.cost-change-page", 0.0);
                 if (plugin.getEconomyManager().withdraw(player, cost)) {
                     plugin.getGuiManager().openStoragePage(player, network, holder.getPage() + 1);
                 } else {
                     player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.not-enough-money")));
+                }
+            }
+            // Slot 46 : TOUT DEPOSER (v2)
+            else if (rawSlot == NexusStorageHolder.SLOT_DEPOSIT_ALL) {
+                if (level != null && !level.canDeposit() && !player.getUniqueId().equals(network.getOwner())) {
+                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous n'avez pas la permission de deposer."));
+                    return;
+                }
+                int maxUniqueTypes = plugin.getUpgradeManager().getPagesForTier(network.getTier()) * 45;
+                int deposited = 0;
+                for (int i = 0; i < player.getInventory().getSize(); i++) {
+                    ItemStack item = player.getInventory().getItem(i);
+                    if (item == null || item.getType() == org.bukkit.Material.AIR) continue;
+                    if (plugin.getStorageManager().deposit(holder.getOwner(), item.clone(), maxUniqueTypes)) {
+                        deposited += item.getAmount();
+                        player.getInventory().setItem(i, null);
+                    }
+                }
+                if (deposited > 0) {
+                    String msg = plugin.getConfig().getString("messages.inventory-deposited",
+                            "&a{items} objet(s) deposes dans le Nexus.")
+                            .replace("{items}", String.valueOf(deposited));
+                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
+                    plugin.getGuiManager().refreshStorageViewers(holder.getOwner());
+                } else {
+                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7Aucun objet a deposer."));
+                }
+            }
+            // Slot 50 : RECHERCHE (v2)
+            else if (rawSlot == NexusStorageHolder.SLOT_SEARCH) {
+                if (holder.getSearchQuery() != null) {
+                    // Effacer la recherche
+                    holder.setSearchQuery(null);
+                    plugin.getGuiManager().refreshStorageViewers(holder.getOwner());
+                    player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7Recherche effacee."));
+                } else {
+                    // Activer le mode saisie chat
+                    pendingSearch.put(player.getUniqueId(), holder.getOwner());
+                    player.closeInventory();
+                    player.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                            "&bRecherche Nexus &7\u2192 Tape le nom ou le materiau de l'objet dans le chat."));
+                    player.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                            "&7Tape &fannuler &7pour annuler."));
                 }
             }
             return;
@@ -467,5 +517,62 @@ public class NexusGUIListener implements Listener {
             player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.not-enough-money")));
         }
         plugin.getGuiManager().openUpgradeMenu(player, network);
+    }
+
+    // ── Recherche via chat (v2) ───────────────────────────────────────────
+
+    @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+    public void onChat(org.bukkit.event.player.AsyncPlayerChatEvent event) {
+        java.util.UUID playerUuid = event.getPlayer().getUniqueId();
+        if (!pendingSearch.containsKey(playerUuid)) return;
+        event.setCancelled(true);
+        java.util.UUID ownerUuid = pendingSearch.remove(playerUuid);
+        Player player = event.getPlayer();
+        String query = event.getMessage().trim();
+        if (query.equalsIgnoreCase("annuler")) {
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7Recherche annulee."));
+            return;
+        }
+        // Rouvrir le GUI avec la recherche active
+        org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> {
+            com.novusmc.nexusstorage.model.NexusNetwork network =
+                    plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
+            if (network == null) return;
+            // On passe par openStoragePage avec query
+            plugin.getGuiManager().openStoragePageWithSearch(player, network, 0, query);
+        });
+    }
+
+    // ── GUI Marché d'énergie (v2) ─────────────────────────────────────────
+
+    @org.bukkit.event.EventHandler
+    public void onEnergyMarketClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (!(event.getInventory().getHolder() instanceof NexusEnergyMarketHolder holder)) return;
+        event.setCancelled(true);
+        int slot = event.getRawSlot();
+        java.util.UUID owner = holder.getNetworkOwner();
+
+        if (slot == NexusEnergyMarketHolder.SLOT_PRICE_PLUS) {
+            plugin.getEnergyMarketManager().adjustPrice(owner, +0.10, player);
+            // Rafraîchir le GUI
+            com.novusmc.nexusstorage.model.NexusNetwork net =
+                    plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
+            if (net != null) plugin.getGuiManager().openEnergyMarket(player, net);
+        } else if (slot == NexusEnergyMarketHolder.SLOT_PRICE_MINUS) {
+            plugin.getEnergyMarketManager().adjustPrice(owner, -0.10, player);
+            com.novusmc.nexusstorage.model.NexusNetwork net =
+                    plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
+            if (net != null) plugin.getGuiManager().openEnergyMarket(player, net);
+        } else if (slot == NexusEnergyMarketHolder.SLOT_AUTOSELL) {
+            plugin.getEnergyMarketManager().toggleAutoSell(owner);
+            com.novusmc.nexusstorage.model.NexusNetwork net =
+                    plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
+            if (net != null) plugin.getGuiManager().openEnergyMarket(player, net);
+        } else if (slot == NexusEnergyMarketHolder.SLOT_BACK) {
+            com.novusmc.nexusstorage.model.NexusNetwork net =
+                    plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
+            if (net != null) plugin.getGuiManager().openMainMenu(player, net);
+        }
     }
 }

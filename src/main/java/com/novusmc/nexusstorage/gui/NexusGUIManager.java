@@ -8,6 +8,8 @@ import com.novusmc.nexusstorage.gui.holders.NexusMainHolder;
 import com.novusmc.nexusstorage.gui.holders.NexusSettingsHolder;
 import com.novusmc.nexusstorage.gui.holders.NexusStorageHolder;
 import com.novusmc.nexusstorage.gui.holders.NexusUpgradeHolder;
+import com.novusmc.nexusstorage.gui.holders.NexusEnergyMarketHolder;
+import com.novusmc.nexusstorage.managers.EnergyMarketManager;
 import com.novusmc.nexusstorage.managers.EnergyManager;
 import com.novusmc.nexusstorage.managers.NexusUpgradeManager;
 import com.novusmc.nexusstorage.model.AccessLevel;
@@ -118,7 +120,19 @@ public class NexusGUIManager {
         UUID owner = holder.getOwner();
         for (int i = 0; i < 54; i++) inv.setItem(i, null);
 
-        List<StoredStack> entries = new ArrayList<>(plugin.getStorageManager().getEntries(owner).values());
+        List<StoredStack> allEntries = new ArrayList<>(plugin.getStorageManager().getEntries(owner).values());
+        // Filtre recherche v2
+        String query = holder.getSearchQuery();
+        List<StoredStack> entries = query == null ? allEntries : allEntries.stream()
+                .filter(s -> {
+                    String matName = s.getTemplate().getType().name().toLowerCase();
+                    if (matName.contains(query.toLowerCase())) return true;
+                    ItemMeta im = s.getTemplate().getItemMeta();
+                    if (im != null && im.hasDisplayName())
+                        return im.getDisplayName().toLowerCase().contains(query.toLowerCase());
+                    return false;
+                })
+                .collect(java.util.stream.Collectors.toList());
         int start = page * 45;
         for (int i = 0; i < 45; i++) {
             int index = start + i;
@@ -145,10 +159,31 @@ public class NexusGUIManager {
         }
 
         for (int i = 45; i < 54; i++) inv.setItem(i, filler());
-        if (page > 0) inv.setItem(45, named(Material.ARROW, "&a« Page precedente"));
+
+        // Navigation pages
+        if (page > 0) inv.setItem(45, named(Material.ARROW, "&a\u00ab Page precedente"));
+        if (page < maxPages - 1) inv.setItem(53, named(Material.ARROW, "&aPage suivante \u00bb"));
+
+        // Livre page (slot 49)
         inv.setItem(49, named(Material.BOOK, "&fPage " + (page + 1) + "/" + maxPages,
                 "&7Types d'objets: &f" + entries.size() + " / " + (maxPages * 45)));
-        if (page < maxPages - 1) inv.setItem(53, named(Material.ARROW, "&aPage suivante »"));
+
+        // Bouton "Tout deposer" (slot 46) - v2
+        String searchLabel = holder.getSearchQuery() != null
+                ? "&bRecherche: &f" + holder.getSearchQuery()
+                : "&7Aucune recherche active";
+        inv.setItem(NexusStorageHolder.SLOT_DEPOSIT_ALL,
+                named(Material.HOPPER, "&a\u27A4 Tout deposer",
+                        "&7Depose instantanement tout",
+                        "&7l'inventaire dans le Nexus.",
+                        "&eClique pour deposer."));
+
+        // Bouton "Recherche" (slot 50) - v2
+        inv.setItem(NexusStorageHolder.SLOT_SEARCH,
+                named(Material.COMPASS, "&b\uD83D\uDD0D Recherche",
+                        searchLabel,
+                        "&7Clique pour rechercher",
+                        "&7ou effacer la recherche."));
     }
 
     /**
@@ -344,6 +379,80 @@ public class NexusGUIManager {
                 "&7Cables: &f" + graph.getCables().size(),
                 "&7Regulateurs: &f" + graph.getRegulators().size(),
                 "&7Moniteurs: &f" + graph.getMonitors().size()));
+
+        player.openInventory(inv);
+    }
+
+    // ================= RECHERCHE (v2) =================
+
+    /** Ouvre le stockage avec une requête de recherche pré-remplie. */
+    public void openStoragePageWithSearch(Player player, NexusNetwork network, int page, String query) {
+        openStoragePage(player, network, page);
+        // Injecter la recherche dans le holder
+        if (player.getOpenInventory().getTopInventory().getHolder() instanceof NexusStorageHolder holder) {
+            holder.setSearchQuery(query);
+            refreshStorageViewers(network.getOwner());
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                    "&bRecherche: &f" + query + " &7(clic sur la boussole pour effacer)"));
+        }
+    }
+
+    /** Rafraîchit la vue de tous les joueurs consultant le stockage de cet owner. */
+    public void refreshStorageViewers(java.util.UUID ownerUuid) {
+        for (Player online : org.bukkit.Bukkit.getOnlinePlayers()) {
+            if (online.getOpenInventory().getTopInventory().getHolder() instanceof NexusStorageHolder h
+                    && h.getOwner().equals(ownerUuid)) {
+                NexusNetwork net = getNexusManager().getNetworkIfExists(online.getUniqueId());
+                if (net != null) openStoragePage(online, net, h.getPage());
+            }
+        }
+    }
+
+    private NexusManager getNexusManager() { return plugin.getNexusManager(); }
+
+    // ================= MARCHE D'ENERGIE (v2) =================
+
+    public void openEnergyMarket(Player player, NexusNetwork network) {
+        EnergyMarketManager.MarketData data = plugin.getEnergyMarketManager().getOrCreate(network.getOwner());
+        NexusEnergyMarketHolder holder = new NexusEnergyMarketHolder(network.getOwner());
+        Inventory inv = Bukkit.createInventory(holder, 54, ChatColor.translateAlternateColorCodes('&', "&e\u26A1 Marche de l'Energie"));
+        holder.setInventory(inv);
+        for (int i = 0; i < 54; i++) inv.setItem(i, filler());
+
+        // Affichage prix
+        inv.setItem(NexusEnergyMarketHolder.SLOT_PRICE_DISPLAY,
+                named(Material.GOLD_INGOT, "&6Prix de vente actuel",
+                        "&7" + String.format("%.2f$", data.price) + " par unite d'energie",
+                        "", "&7Modifie avec les boutons - / +"));
+
+        // Boutons -/+ prix
+        inv.setItem(NexusEnergyMarketHolder.SLOT_PRICE_MINUS,
+                named(Material.RED_CONCRETE, "&c- 0.10$ par unite",
+                        "&7Diminue le prix de vente."));
+        inv.setItem(NexusEnergyMarketHolder.SLOT_PRICE_PLUS,
+                named(Material.LIME_CONCRETE, "&a+ 0.10$ par unite",
+                        "&7Augmente le prix de vente."));
+
+        // Stats
+        long sold24h = plugin.getEnergyMarketManager().soldInLastHours(network.getOwner(), 24);
+        inv.setItem(NexusEnergyMarketHolder.SLOT_STATS,
+                named(Material.BOOK, "&b\uD83D\uDCCA Statistiques",
+                        "&7Vendu (24h): &f" + sold24h + " \u26A1",
+                        "&7Total vendu : &f" + data.totalSold + " \u26A1",
+                        "&7Total gagne  : &f" + String.format("%.2f$", data.totalEarned)));
+
+        // Toggle vente auto
+        Material autoMat = data.autoSell ? Material.LIME_STAINED_GLASS_PANE : Material.RED_STAINED_GLASS_PANE;
+        String   autoTxt = data.autoSell ? "&aACTIVEE" : "&cDESACTIVEE";
+        inv.setItem(NexusEnergyMarketHolder.SLOT_AUTOSELL,
+                named(autoMat, "&e\uD83D\uDD04 Vente automatique: " + autoTxt,
+                        "&7L'exces d'energie est vendu",
+                        "&7automatiquement au prix fixe.",
+                        "&eClique pour basculer."));
+
+        // Retour
+        inv.setItem(NexusEnergyMarketHolder.SLOT_BACK,
+                named(Material.ARROW, "&c\u2190 Retour"));
 
         player.openInventory(inv);
     }

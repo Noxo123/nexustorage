@@ -1,8 +1,7 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# Configuration NexusStorage v2.0 - Système de stockage interconnecté premium
+# Configuration NexusStorage v2.0
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Active/désactive les intégrations externes (aussi modifiable en jeu via /nexusadmin toggle)
 integrations:
   vault:
     enabled: true
@@ -20,7 +19,7 @@ economy:
   cost-add-member: 50.0
 
 # ═══════════════════════════════════════════════════════════════════════════
-# UPGRADES DE RÉSEAU (augmente les pages de stockage)
+# UPGRADES
 # ═══════════════════════════════════════════════════════════════════════════
 upgrades:
   tier1:
@@ -40,16 +39,11 @@ upgrades:
     cost: 250000.0
 
 # ═══════════════════════════════════════════════════════════════════════════
-# SYSTÈME D'ÉNERGIE
+# ÉNERGIE
 # ═══════════════════════════════════════════════════════════════════════════
 energy:
-  # Duree d'un cycle de simulation du réseau d'énergie, en ticks serveur (20 = 1 seconde)
   tick-interval: 20
-  
-  # Prix de base de l'électricité vendue (prix par unité d'énergie)
-  # Le joueur peut ajuster ce prix via la GUI
   base-energy-price: 0.1
-  
   solar_panel_basic:
     production: 20
   solar_panel_advanced:
@@ -71,7 +65,7 @@ energy:
     default-threshold: 20
 
 # ═══════════════════════════════════════════════════════════════════════════
-# NEXUS CHEST LINK (connecte un coffre au stockage virtuel)
+# CHEST LINK
 # ═══════════════════════════════════════════════════════════════════════════
 chest-link:
   tick-interval: 20
@@ -80,105 +74,59 @@ chest-link:
   max-upgrade-level: 3
 
 # ═══════════════════════════════════════════════════════════════════════════
-# BLOCS NEXUS (accès au stockage - WiFi et Normal)
+# BLOCS NEXUS (clic droit = ouvre stockage)
+# Laissez itemsadder vide pour utiliser le bloc vanilla
 # ═══════════════════════════════════════════════════════════════════════════
 nexus-blocks:
-  # Bloc Nexus Normal - vanilla
   normal:
     material: "AMETHYST_BLOCK"
-    # ItemsAdder : "custom:nexus_block_normal" (laissez vide pour vanilla)
     itemsadder: ""
-  
-  # Bloc Nexus WiFi - vanilla
   wifi:
     material: "LIGHTNING_ROD"
-    # ItemsAdder : "custom:nexus_block_wifi" (laissez vide pour vanilla)
     itemsadder: ""
 
 # ═══════════════════════════════════════════════════════════════════════════
-# INTERFACE GUI (personnalisable)
-# ═══════════════════════════════════════════════════════════════════════════
-gui:
-  # Thème : 'default', 'dark', 'forest', 'ocean' (custom themes via config)
-  theme: "default"
-  
-  # Taille de la barre de recherche (max 20 caractères)
-  search-bar-length: 20
-  
-  # Position du bouton "Déposer tous les items"
-  # Positions: "top-left", "top-right", "bottom-left", "bottom-right"
-  deposit-button-position: "top-right"
-  
-  # Afficher le livre avec numéro de page
-  show-page-book: true
-
-# ═══════════════════════════════════════════════════════════════════════════
-# SYSTÈME D'ENTREPRISES
+# ENTREPRISES
 # ═══════════════════════════════════════════════════════════════════════════
 companies:
-  # Coût de création d'une entreprise (très élevé pour préserver l'économie)
   creation-cost: 50000.0
-  
-  # Coût mensuel de maintenance d'une entreprise
-  monthly-maintenance-cost: 5000.0
-  
-  # Nombre maximum de membres par entreprise (-1 = illimité)
   max-members: 50
-  
-  # L'invitation doit être acceptée avant de rejoindre le réseau
   require-invitation-acceptance: true
-  
-  # Durée de validité d'une invitation en heures (0 = illimitée)
   invitation-expiry-hours: 72
 
 # ═══════════════════════════════════════════════════════════════════════════
-# MESSAGES PERSONNALISABLES
+# MESSAGES
 # ═══════════════════════════════════════════════════════════════════════════
 messages:
-  # Network
-  no-network: "&cTu ne possèdes pas encore de réseau Nexus. Pose un Nexus Core pour en créer un."
-  no-access: "&cTu n'as pas la permission d'ouvrir ce réseau Nexus."
+  no-network: "&cTu ne possedes pas encore de reseau Nexus. Pose un Nexus Core pour en creer un."
+  no-access: "&cTu n'as pas la permission d'ouvrir ce reseau Nexus."
   not-enough-money: "&cTu n'as pas assez d'argent."
-  core-created: "&aTon réseau Nexus a été créé avec succès !"
-  member-added: "&aJoueur ajouté au réseau Nexus."
-  member-removed: "&aJoueur retiré du réseau Nexus."
-  upgrade-success: "&aRéseau amélioré avec succès !"
-  upgrade-max: "&eTon réseau est déjà au niveau maximum."
-  network-renamed: "&aRéseau renommé avec succès !"
-  notifications-toggled: "&aNotifications du réseau: &f{state}"
-  
-  # Energy
-  core-required: "&cCe bloc doit être connecté à un Nexus Energy Core pour fonctionner."
-  low-energy: "&c⚡ Ton réseau '{name}' est en énergie faible ({percent}%), les Interfaces sont en pause."
-  energy-price-set: "&aLe prix de vente d'électricité est maintenant: &f${price} par unité"
-  energy-sold: "&a⚡ Tu as vendu &f{amount} &aénergie pour &f${profit}"
-  
-  # Chest Link
-  chestlink-placed: "&aNexus Chest Link connecté à ton réseau !"
-  chestlink-no-chest: "&cAucun coffre simple ou double adjacent trouvé."
-  chestlink-upgraded: "&d✔ Chest Link amélioré au niveau {level} !"
-  chestlink-max-level: "&eCe Chest Link est déjà au niveau maximum."
-  
-  # Storage/Inventory
-  inventory-deposited: "&aRemorquage de ton inventaire... &f{items} &aobjet(s) ajoutés."
-  search-no-results: "&cAucun objet ne correspond à ta recherche: &f{query}"
-  
-  # Companies
-  company-created: "&aEntreprise créée avec succès: &f{name}"
-  company-invitation-sent: "&aInvitation d'entreprise envoyée à &f{player}"
-  company-invitation-received: "&eNouvelle invitation d'entreprise: &f{company} &e(/nexus company accept {company})"
+  core-created: "&aTon reseau Nexus a ete cree avec succes !"
+  member-added: "&aJoueur ajoute au reseau Nexus."
+  member-removed: "&aJoueur retire du reseau Nexus."
+  upgrade-success: "&aReseau ameliore avec succes !"
+  upgrade-max: "&eTon reseau est deja au niveau maximum."
+  network-renamed: "&aReseau renomme avec succes !"
+  notifications-toggled: "&aNotifications du reseau: &f{state}"
+  core-required: "&cCe bloc doit etre connecte a un Nexus Energy Core pour fonctionner."
+  low-energy: "&c⚡ Ton reseau '{name}' est en energie faible ({percent}%), les Interfaces sont en pause."
+  energy-price-set: "&aLe prix de vente d'electricite est maintenant: &f${price} par unite"
+  energy-sold: "&a⚡ Tu as vendu &f{amount} &aenergie pour &f${profit}"
+  chestlink-placed: "&aNexus Chest Link connecte a ton reseau !"
+  chestlink-no-chest: "&cAucun coffre simple ou double adjacent trouve."
+  chestlink-upgraded: "&d✔ Chest Link ameliore au niveau {level} !"
+  chestlink-max-level: "&eCe Chest Link est deja au niveau maximum."
+  inventory-deposited: "&a{items} objet(s) deposes dans le Nexus."
+  search-no-results: "&cAucun objet ne correspond a: &f{query}"
+  nexus-block-opened: "&aAcces au stockage Nexus !"
+  company-created: "&aEntreprise creee: &f{name} &7(cout: &f{cost}$&7)"
+  company-invitation-sent: "&aInvitation envoyee a &f{player}&a."
+  company-invitation-received: "&6[NexusStorage] &eInvitation de &f{company}&e. Tape &f/company accept {company}&e pour rejoindre."
   company-joined: "&aTu as rejoint l'entreprise: &f{company}"
-  company-invitation-expired: "&cL'invitation d'entreprise a expiré."
-  company-not-found: "&cEntreprise non trouvée."
-  company-already-member: "&cTu es déjà membre d'une entreprise. Quitte-la d'abord."
-  company-no-permission: "&cTu n'as pas la permission de gérer cette entreprise."
-  company-must-accept: "&cTu dois accepter l'invitation avant de rejoindre le réseau."
-  
-  # Nexus Blocks
-  nexus-block-opened: "&aAccès au stockage Nexus ouvert!"
-  
-  # Admin
-  admin-no-permission: "&cTu n'as pas la permission d'utiliser les commandes admin NexusStorage."
-  admin-reloaded: "&aConfiguration NexusStorage rechargée."
-  admin-toggle: "&a{feature} est maintenant: &f{state}"
-  admin-network-not-found: "&cAucun réseau Nexus trouvé pour ce joueur."
+  company-invitation-expired: "&cL'invitation a expire ou est invalide."
+  company-not-found: "&cEntreprise introuvable."
+  company-already-member: "&cTu es deja membre d'une entreprise. Quitte-la d'abord (/company leave)."
+  company-no-permission: "&cTu n'as pas la permission de gerer cette entreprise."
+  company-left: "&aTu as quitte l'entreprise."
+  company-dissolved: "&cEntreprise dissoute."
+  admin-reloaded: "&aConfiguration NexusStorage rechargee."

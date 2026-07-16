@@ -1,15 +1,15 @@
 name: NexusStorage
 main: com.novusmc.nexusstorage.Main
-version: 1.0
+version: 2.0.0
 api-version: '1.21'
 author: NovusMC
-description: Systeme de stockage interconnecte SMP premium.
-softdepend: [Vault]
+description: Systeme de stockage interconnecte SMP premium avec entreprises, energie et marche.
+softdepend: [Vault, PlaceholderAPI, ItemsAdder]
 
 commands:
   nexus:
     description: Commande principale de NexusStorage
-    usage: /nexus [give|upgrade|access]
+    usage: /nexus [give|upgrade|access|energy]
     permission: nexusstorage.use
     permission-message: "Tu n'as pas la permission d'utiliser NexusStorage."
   nexusadmin:
@@ -17,6 +17,11 @@ commands:
     usage: /nexusadmin [gui|reload|toggle|network|give]
     permission: nexusstorage.admin
     permission-message: "Tu n'as pas la permission d'utiliser les commandes admin NexusStorage."
+  company:
+    description: Gestion des entreprises Nexus
+    usage: /company <create|invite|accept|decline|info|members|leave|help>
+    aliases: [comp]
+    permission: nexusstorage.use
 
 permissions:
   nexusstorage.use:

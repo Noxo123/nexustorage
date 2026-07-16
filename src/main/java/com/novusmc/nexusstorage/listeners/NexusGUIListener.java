@@ -336,23 +336,40 @@ public class NexusGUIListener implements Listener {
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
     public void onChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
+        UUID playerUuid = player.getUniqueId();
 
-        UUID addMemberOwner = pendingAddMember.get(player.getUniqueId());
-        UUID renameOwner = pendingRename.get(player.getUniqueId());
-        if (addMemberOwner == null && renameOwner == null) return;
+        UUID addMemberOwner = pendingAddMember.get(playerUuid);
+        UUID renameOwner    = pendingRename.get(playerUuid);
+        UUID searchOwner    = pendingSearch.get(playerUuid);
+
+        if (addMemberOwner == null && renameOwner == null && searchOwner == null) return;
 
         event.setCancelled(true);
         String message = event.getMessage().trim();
 
         if (addMemberOwner != null) {
-            pendingAddMember.remove(player.getUniqueId());
+            pendingAddMember.remove(playerUuid);
             handleAddMemberInput(player, addMemberOwner, message);
-        } else {
-            pendingRename.remove(player.getUniqueId());
+        } else if (renameOwner != null) {
+            pendingRename.remove(playerUuid);
             handleRenameInput(player, renameOwner, message);
+        } else {
+            // Recherche stockage (v2)
+            pendingSearch.remove(playerUuid);
+            if (message.equalsIgnoreCase("annuler")) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7Recherche annulee."));
+                return;
+            }
+            final String query = message;
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                com.novusmc.nexusstorage.model.NexusNetwork network =
+                        plugin.getNexusManager().getNetworkIfExists(playerUuid);
+                if (network != null)
+                    plugin.getGuiManager().openStoragePageWithSearch(player, network, 0, query);
+            });
         }
     }
 
@@ -517,30 +534,6 @@ public class NexusGUIListener implements Listener {
             player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.not-enough-money")));
         }
         plugin.getGuiManager().openUpgradeMenu(player, network);
-    }
-
-    // ── Recherche via chat (v2) ───────────────────────────────────────────
-
-    @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
-    public void onChat(org.bukkit.event.player.AsyncPlayerChatEvent event) {
-        java.util.UUID playerUuid = event.getPlayer().getUniqueId();
-        if (!pendingSearch.containsKey(playerUuid)) return;
-        event.setCancelled(true);
-        java.util.UUID ownerUuid = pendingSearch.remove(playerUuid);
-        Player player = event.getPlayer();
-        String query = event.getMessage().trim();
-        if (query.equalsIgnoreCase("annuler")) {
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7Recherche annulee."));
-            return;
-        }
-        // Rouvrir le GUI avec la recherche active
-        org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> {
-            com.novusmc.nexusstorage.model.NexusNetwork network =
-                    plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
-            if (network == null) return;
-            // On passe par openStoragePage avec query
-            plugin.getGuiManager().openStoragePageWithSearch(player, network, 0, query);
-        });
     }
 
     // ── GUI Marché d'énergie (v2) ─────────────────────────────────────────

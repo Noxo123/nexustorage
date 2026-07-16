@@ -388,27 +388,14 @@ public class NexusGUIManager {
     /** Ouvre le stockage avec une requête de recherche pré-remplie. */
     public void openStoragePageWithSearch(Player player, NexusNetwork network, int page, String query) {
         openStoragePage(player, network, page);
-        // Injecter la recherche dans le holder
         if (player.getOpenInventory().getTopInventory().getHolder() instanceof NexusStorageHolder holder) {
             holder.setSearchQuery(query);
-            refreshStorageViewers(network.getOwner());
+            int maxPages = plugin.getUpgradeManager().getPagesForTier(network.getTier());
+            renderStoragePage(holder, holder.getPage(), maxPages);
             player.sendMessage(ChatColor.translateAlternateColorCodes('&',
                     "&bRecherche: &f" + query + " &7(clic sur la boussole pour effacer)"));
         }
     }
-
-    /** Rafraîchit la vue de tous les joueurs consultant le stockage de cet owner. */
-    public void refreshStorageViewers(java.util.UUID ownerUuid) {
-        for (Player online : org.bukkit.Bukkit.getOnlinePlayers()) {
-            if (online.getOpenInventory().getTopInventory().getHolder() instanceof NexusStorageHolder h
-                    && h.getOwner().equals(ownerUuid)) {
-                NexusNetwork net = getNexusManager().getNetworkIfExists(online.getUniqueId());
-                if (net != null) openStoragePage(online, net, h.getPage());
-            }
-        }
-    }
-
-    private NexusManager getNexusManager() { return plugin.getNexusManager(); }
 
     // ================= MARCHE D'ENERGIE (v2) =================
 

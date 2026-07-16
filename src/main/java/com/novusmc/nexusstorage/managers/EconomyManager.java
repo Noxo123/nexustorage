@@ -66,6 +66,21 @@ public class EconomyManager {
         return economy.withdrawPlayer(player, amount).transactionSuccess();
     }
 
+    /** Retire de l'argent au compte d'un joueur offline (par UUID). */
+    public boolean withdraw(java.util.UUID uuid, double amount) {
+        if (!isEnabled() || amount <= 0) return true;
+        org.bukkit.OfflinePlayer op = org.bukkit.Bukkit.getOfflinePlayer(uuid);
+        if (!economy.has(op, amount)) return false;
+        return economy.withdrawPlayer(op, amount).transactionSuccess();
+    }
+
+    /** Dépose de l'argent sur le compte d'un joueur (par UUID). */
+    public void deposit(java.util.UUID uuid, double amount) {
+        if (!isEnabled() || amount <= 0) return;
+        org.bukkit.OfflinePlayer op = org.bukkit.Bukkit.getOfflinePlayer(uuid);
+        economy.depositPlayer(op, amount);
+    }
+
     public String format(double amount) {
         if (isEnabled()) return economy.format(amount);
         return String.valueOf(amount);

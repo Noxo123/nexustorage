@@ -7,6 +7,7 @@ import com.novusmc.nexusstorage.gui.NexusGUIManager;
 import com.novusmc.nexusstorage.integration.NexusPlaceholders;
 import com.novusmc.nexusstorage.listeners.ChestLinkListener;
 import com.novusmc.nexusstorage.listeners.EnergyListener;
+import com.novusmc.nexusstorage.listeners.NexusConnectedBlockListener;
 import com.novusmc.nexusstorage.listeners.NexusBlockListener;
 import com.novusmc.nexusstorage.listeners.NexusCoreListener;
 import com.novusmc.nexusstorage.listeners.NexusGUIListener;
@@ -62,17 +63,19 @@ public class Main extends JavaPlugin {
     private NamespacedKey energyTypeKey;
     private NamespacedKey chestLinkKey;
     private NamespacedKey upgradeCrystalKey;
+    private NamespacedKey nexusConnectedBlockKey;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         new ConfigManager(this).mergeDefaultConfig();
 
-        nexusCoreKey      = new NamespacedKey(this, "nexus_core");
-        nexusTabletKey    = new NamespacedKey(this, "nexus_tablet");
-        energyTypeKey     = new NamespacedKey(this, "nexus_energy_type");
-        chestLinkKey      = new NamespacedKey(this, "nexus_chest_link");
-        upgradeCrystalKey = new NamespacedKey(this, "nexus_upgrade_crystal");
+        nexusCoreKey          = new NamespacedKey(this, "nexus_core");
+        nexusTabletKey        = new NamespacedKey(this, "nexus_tablet");
+        energyTypeKey         = new NamespacedKey(this, "nexus_energy_type");
+        chestLinkKey          = new NamespacedKey(this, "nexus_chest_link");
+        upgradeCrystalKey     = new NamespacedKey(this, "nexus_upgrade_crystal");
+        nexusConnectedBlockKey = new NamespacedKey(this, "nexus_connected_block");
 
         this.accessManager       = new NexusAccessManager(this);
         this.storageManager      = new NexusStorageManager(this);
@@ -86,12 +89,13 @@ public class Main extends JavaPlugin {
         this.companyManager      = new CompanyManager(this);
         this.energyMarketManager = new EnergyMarketManager(this);
 
-        getServer().getPluginManager().registerEvents(new NexusCoreListener(this),   this);
-        getServer().getPluginManager().registerEvents(new NexusTabletListener(this), this);
-        getServer().getPluginManager().registerEvents(new NexusGUIListener(this),    this);
-        getServer().getPluginManager().registerEvents(new EnergyListener(this),      this);
-        getServer().getPluginManager().registerEvents(new ChestLinkListener(this),   this);
-        getServer().getPluginManager().registerEvents(new NexusBlockListener(this),  this);
+        getServer().getPluginManager().registerEvents(new NexusCoreListener(this),          this);
+        getServer().getPluginManager().registerEvents(new NexusTabletListener(this),        this);
+        getServer().getPluginManager().registerEvents(new NexusGUIListener(this),           this);
+        getServer().getPluginManager().registerEvents(new EnergyListener(this),             this);
+        getServer().getPluginManager().registerEvents(new ChestLinkListener(this),          this);
+        getServer().getPluginManager().registerEvents(new NexusBlockListener(this),         this);
+        getServer().getPluginManager().registerEvents(new NexusConnectedBlockListener(this),this);
 
         NexusCommand nexusCmd = new NexusCommand(this);
         registerCommandSafely("nexus", nexusCmd, nexusCmd);
@@ -154,6 +158,20 @@ public class Main extends JavaPlugin {
         }
     }
 
+    public ItemStack buildConnectedBlockItem() {
+        ItemStack item = getItemsAdderManager().resolve("nexus-connected-block");
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&d&lNexus Connected Block"));
+        meta.setLore(List.of(
+                ChatColor.translateAlternateColorCodes('&', "&7Pose ce bloc n'importe ou."),
+                ChatColor.translateAlternateColorCodes('&', "&7Clic droit pour ouvrir ton stockage Nexus."),
+                ChatColor.translateAlternateColorCodes('&', "&eLie automatiquement a ton reseau a la pose.")
+        ));
+        meta.getPersistentDataContainer().set(nexusConnectedBlockKey, PersistentDataType.BOOLEAN, true);
+        item.setItemMeta(meta);
+        return item;
+    }
+
     public ItemStack buildEnergyItem(EnergyBlockType type) {
         ItemStack item = new ItemStack(type.getMaterial());
         ItemMeta meta = item.getItemMeta();
@@ -210,9 +228,10 @@ public class Main extends JavaPlugin {
     public ChestLinkManager      getChestLinkManager()    { return chestLinkManager; }
     public CompanyManager        getCompanyManager()      { return companyManager; }
     public EnergyMarketManager   getEnergyMarketManager() { return energyMarketManager; }
-    public NamespacedKey getNexusCoreKey()      { return nexusCoreKey; }
-    public NamespacedKey getNexusTabletKey()    { return nexusTabletKey; }
-    public NamespacedKey getEnergyTypeKey()     { return energyTypeKey; }
-    public NamespacedKey getChestLinkKey()      { return chestLinkKey; }
-    public NamespacedKey getUpgradeCrystalKey() { return upgradeCrystalKey; }
+    public NamespacedKey getNexusCoreKey()           { return nexusCoreKey; }
+    public NamespacedKey getNexusTabletKey()         { return nexusTabletKey; }
+    public NamespacedKey getEnergyTypeKey()          { return energyTypeKey; }
+    public NamespacedKey getChestLinkKey()           { return chestLinkKey; }
+    public NamespacedKey getUpgradeCrystalKey()      { return upgradeCrystalKey; }
+    public NamespacedKey getNexusConnectedBlockKey() { return nexusConnectedBlockKey; }
 }

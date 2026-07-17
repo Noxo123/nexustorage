@@ -57,12 +57,17 @@ public class NexusGUIListener implements Listener {
         Player player = (Player) event.getWhoClicked();
         NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(holder.getOwner());
 
-        // Vérification d'accès de base au menu principal
+        // Vérification d'accès : propriétaire, membre direct, ou membre d'entreprise
         AccessLevel level = network.getAccessFor(player.getUniqueId());
         if (level == null && !player.getUniqueId().equals(network.getOwner())) {
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous n'avez pas accès à ce réseau."));
-            player.closeInventory();
-            return;
+            com.novusmc.nexusstorage.model.Company company =
+                    plugin.getCompanyManager().getByPlayer(player.getUniqueId());
+            boolean accessViaCompany = company != null && company.getOwner().equals(network.getOwner());
+            if (!accessViaCompany) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous n'avez pas accès à ce réseau."));
+                player.closeInventory();
+                return;
+            }
         }
 
         switch (clicked.getType()) {
@@ -88,11 +93,18 @@ public class NexusGUIListener implements Listener {
         NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(holder.getOwner());
         AccessLevel level = network.getAccessFor(player.getUniqueId());
 
-        // Protection : S'il n'a aucun droit et n'est pas le proprio, dehors.
+        // Protection : S'il n'a aucun droit et n'est pas le proprio, vérifier l'entreprise
         if (level == null && !player.getUniqueId().equals(network.getOwner())) {
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous n'avez pas accès à ce stockage."));
-            player.closeInventory();
-            return;
+            com.novusmc.nexusstorage.model.Company company =
+                    plugin.getCompanyManager().getByPlayer(player.getUniqueId());
+            boolean accessViaCompany = company != null && company.getOwner().equals(network.getOwner());
+            if (!accessViaCompany) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cVous n'avez pas accès à ce stockage."));
+                player.closeInventory();
+                return;
+            }
+            // Les membres d'entreprise ont accès WITHDRAW par défaut
+            level = com.novusmc.nexusstorage.model.AccessLevel.WITHDRAW;
         }
 
         ClickType clickType = event.getClick();
@@ -491,13 +503,13 @@ public class NexusGUIListener implements Listener {
                 boolean current = plugin.getConfig().getBoolean("integrations.itemsadder.enabled", false);
                 plugin.getConfig().set("integrations.itemsadder.enabled", !current);
                 plugin.saveConfig();
-                plugin.getItemsAdderManager().refresh();
+                plugin.getItemsAdderManager().reload();
                 plugin.getGuiManager().openAdminMenu(player);
             }
             case 15 -> {
                 plugin.reloadConfig();
                 plugin.getEconomyManager().refresh();
-                plugin.getItemsAdderManager().refresh();
+                plugin.getItemsAdderManager().reload();
                 player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages.admin-reloaded")));
                 plugin.getGuiManager().openAdminMenu(player);
             }

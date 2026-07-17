@@ -14,12 +14,15 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * Gere l'ensemble des Nexus Core places dans le monde (cores.yml) ainsi que
- * le cache en memoire des reseaux Nexus (NexusNetwork) des joueurs.
+ * Gere les Nexus Core places dans le monde (cores.yml) et le cache en memoire
+ * des NexusNetwork.
  *
- * v2 : getNetworkIfExists() remonte aussi le reseau du proprietaire de
- * l'entreprise dont le joueur est membre, corrigeant le bug "Vous n'etes
- * dans aucun reseau" lors de l'utilisation de /nexus apres acceptation.
+ * Résolution d'accès pour un joueur (getNetworkIfExists) :
+ *   1. Le joueur est propriétaire → son réseau.
+ *   2. Le joueur est membre listé dans le fichier access/<owner>.yml → réseau de cet owner.
+ *   3. Le joueur est membre d'une entreprise → réseau du propriétaire de l'entreprise.
+ *
+ * Cela corrige le bug où un joueur ajouté via /nexus access voit "aucun réseau".
  */
 public class NexusManager {
 
@@ -27,6 +30,7 @@ public class NexusManager {
     private final File coresFile;
     private YamlConfiguration coresYml;
 
+    /** owner UUID -> NexusNetwork (cache mémoire) */
     private final Map<UUID, NexusNetwork> networks = new HashMap<>();
 
     public NexusManager(Main plugin) {
@@ -35,14 +39,12 @@ public class NexusManager {
         loadCoresFile();
     }
 
+    // ── Fichier cores.yml ─────────────────────────────────────────────────
+
     private void loadCoresFile() {
         if (!coresFile.exists()) {
-            try {
-                coresFile.getParentFile().mkdirs();
-                coresFile.createNewFile();
-            } catch (IOException e) {
-                plugin.getLogger().log(Level.SEVERE, "Impossible de creer cores.yml", e);
-            }
+            try { coresFile.getParentFile().mkdirs(); coresFile.createNewFile(); }
+            catch (IOException e) { plugin.getLogger().log(Level.SEVERE, "Impossible de creer cores.yml", e); }
         }
         coresYml = YamlConfiguration.loadConfiguration(coresFile);
     }
@@ -56,43 +58,60 @@ public class NexusManager {
         return loc.getWorld().getName() + ";" + loc.getBlockX() + ";" + loc.getBlockY() + ";" + loc.getBlockZ();
     }
 
+    // ── Réseau mémoire ────────────────────────────────────────────────────
+
     public NexusNetwork getOrCreateNetwork(UUID owner) {
         return networks.computeIfAbsent(owner, id -> plugin.getAccessManager().loadNetwork(id));
     }
 
     /**
-     * Retourne le reseau d'un joueur s'il existe.
+     * Résout le réseau visible pour un joueur donné.
      *
-     * Ordre de resolution :
-     *  1. Le joueur est proprietaire d'un reseau (fichier access/ ou core enregistre).
-     *  2. Le joueur est membre d'une entreprise → reseau du proprietaire de l'entreprise.
+     * Ordre de résolution :
+     *  1. Propriétaire direct.
+     *  2. Membre listé dans un fichier access/ existant (scan des fichiers).
+     *  3. Membre d'une entreprise → réseau du propriétaire de l'entreprise.
      */
     public NexusNetwork getNetworkIfExists(UUID playerUuid) {
-        // 1. Reseau propre
+        // 1. Propriétaire
+        File accessFolder = new File(plugin.getDataFolder(), "access");
+        File ownFile = new File(accessFolder, playerUuid + ".yml");
+        if (ownFile.exists()) return getOrCreateNetwork(playerUuid);
+        // Vérifie aussi le cache
         if (networks.containsKey(playerUuid)) return networks.get(playerUuid);
-        File accessFile = new File(new File(plugin.getDataFolder(), "access"), playerUuid + ".yml");
-        boolean hasCore = false;
-        for (String key : coresYml.getKeys(false)) {
-            if (playerUuid.toString().equals(coresYml.getString(key))) { hasCore = true; break; }
-        }
-        if (accessFile.exists() || hasCore) return getOrCreateNetwork(playerUuid);
 
-        // 2. Reseau via entreprise (FIX bug invitation)
+        // 2. Membre d'un réseau existant (scan des fichiers access/)
+        //    D'abord chercher dans les réseaux déjà en cache (O(n) mais évite I/O)
+        for (NexusNetwork cached : networks.values()) {
+            if (cached.getMembers().containsKey(playerUuid)) return cached;
+        }
+        //    Ensuite scan des fichiers pour trouver un réseau qui liste ce joueur
+        if (accessFolder.exists()) {
+            for (File f : accessFolder.listFiles()) {
+                if (!f.getName().endsWith(".yml")) continue;
+                try {
+                    UUID ownerUuid = UUID.fromString(f.getName().replace(".yml", ""));
+                    if (ownerUuid.equals(playerUuid)) continue;
+                    // Charger en cache si pas encore présent
+                    NexusNetwork net = getOrCreateNetwork(ownerUuid);
+                    if (net.getMembers().containsKey(playerUuid)) return net;
+                } catch (IllegalArgumentException ignored) {}
+            }
+        }
+
+        // 3. Membre d'une entreprise
         Company company = plugin.getCompanyManager().getByPlayer(playerUuid);
         if (company != null) {
             UUID companyOwner = company.getOwner();
-            // On ne cree pas le reseau si l'owner n'en a pas encore
-            if (networks.containsKey(companyOwner)) return networks.get(companyOwner);
-            File ownerAccess = new File(new File(plugin.getDataFolder(), "access"), companyOwner + ".yml");
-            boolean ownerHasCore = false;
-            for (String key : coresYml.getKeys(false)) {
-                if (companyOwner.toString().equals(coresYml.getString(key))) { ownerHasCore = true; break; }
-            }
-            if (ownerAccess.exists() || ownerHasCore) return getOrCreateNetwork(companyOwner);
+            File ownerFile = new File(accessFolder, companyOwner + ".yml");
+            if (ownerFile.exists() || networks.containsKey(companyOwner))
+                return getOrCreateNetwork(companyOwner);
         }
 
         return null;
     }
+
+    // ── Cores ─────────────────────────────────────────────────────────────
 
     public NexusNetwork registerCore(UUID owner, Location location) {
         String key = keyFor(location);
@@ -110,20 +129,63 @@ public class NexusManager {
         saveCoresFile();
         if (ownerStr != null) {
             try {
-                NexusNetwork network = networks.get(UUID.fromString(ownerStr));
-                if (network != null) network.removeCore(key);
+                NexusNetwork net = networks.get(UUID.fromString(ownerStr));
+                if (net != null) net.removeCore(key);
             } catch (IllegalArgumentException ignored) {}
         }
     }
 
     public UUID getOwnerAt(Location location) {
-        String ownerStr = coresYml.getString(keyFor(location));
-        if (ownerStr == null) return null;
-        try { return UUID.fromString(ownerStr); } catch (IllegalArgumentException e) { return null; }
+        String s = coresYml.getString(keyFor(location));
+        if (s == null) return null;
+        try { return UUID.fromString(s); } catch (IllegalArgumentException e) { return null; }
     }
 
     public boolean isCoreLocation(Location location) { return coresYml.contains(keyFor(location)); }
-    public int cachedNetworkCount()                   { return networks.size(); }
+    public int cachedNetworkCount() { return networks.size(); }
+
+    // ── Blocs connectés (ConnectedBlock) ──────────────────────────────────
+    // Fichier connected_blocks.yml : "world;x;y;z" -> ownerUUID
+
+    private final File connectedBlocksFile = new File(
+            plugin.getDataFolder(), "connected_blocks.yml");
+    private YamlConfiguration connectedBlocksYml = null;
+
+    private YamlConfiguration getConnectedYml() {
+        if (connectedBlocksYml == null) {
+            if (!connectedBlocksFile.exists()) {
+                try { connectedBlocksFile.getParentFile().mkdirs(); connectedBlocksFile.createNewFile(); }
+                catch (IOException e) { plugin.getLogger().log(Level.SEVERE, "Impossible de creer connected_blocks.yml", e); }
+            }
+            connectedBlocksYml = YamlConfiguration.loadConfiguration(connectedBlocksFile);
+        }
+        return connectedBlocksYml;
+    }
+
+    private void saveConnectedYml() {
+        try { getConnectedYml().save(connectedBlocksFile); }
+        catch (IOException e) { plugin.getLogger().log(Level.SEVERE, "Impossible de sauvegarder connected_blocks.yml", e); }
+    }
+
+    public void registerConnectedBlock(Location loc, UUID owner) {
+        getConnectedYml().set(keyFor(loc), owner.toString());
+        saveConnectedYml();
+    }
+
+    public void unregisterConnectedBlock(Location loc) {
+        getConnectedYml().set(keyFor(loc), null);
+        saveConnectedYml();
+    }
+
+    public UUID getConnectedBlockOwner(Location loc) {
+        String s = getConnectedYml().getString(keyFor(loc));
+        if (s == null) return null;
+        try { return UUID.fromString(s); } catch (IllegalArgumentException e) { return null; }
+    }
+
+    public boolean isConnectedBlock(Location loc) { return getConnectedYml().contains(keyFor(loc)); }
+
+    // ── Sauvegarde ────────────────────────────────────────────────────────
 
     public void saveAll() {
         saveCoresFile();

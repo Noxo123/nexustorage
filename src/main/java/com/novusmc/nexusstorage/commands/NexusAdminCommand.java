@@ -57,8 +57,9 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
             }
             case "reload" -> {
                 plugin.reloadConfig();
+                new com.novusmc.nexusstorage.util.ConfigManager(plugin).mergeDefaultConfig();
                 plugin.getEconomyManager().refresh();
-                plugin.getItemsAdderManager().refresh();
+                plugin.getItemsAdderManager().reload();
                 msg(sender, plugin.getConfig().getString("messages.admin-reloaded"));
             }
             case "toggle" -> handleToggle(sender, args);
@@ -92,7 +93,7 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
         if (feature.equals("vault")) {
             plugin.getEconomyManager().refresh();
         } else {
-            plugin.getItemsAdderManager().refresh();
+            plugin.getItemsAdderManager().reload();
         }
 
         String label = feature.equals("vault") ? "Vault" : "ItemsAdder (en preparation)";

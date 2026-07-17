@@ -1,81 +1,77 @@
 package com.novusmc.nexusstorage.listeners;
 
 import com.novusmc.nexusstorage.Main;
+import com.novusmc.nexusstorage.model.Company;
 import com.novusmc.nexusstorage.model.NexusNetwork;
 import net.md_5.bungee.api.ChatColor;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 
 /**
- * Ouvre directement le stockage Nexus lors d'un clic droit sur un
- * Bloc Nexus Normal (AMETHYST_BLOCK) ou Bloc Nexus WiFi (LIGHTNING_ROD).
- * Les materiaux peuvent etre remplaces par des blocs ItemsAdder dans config.yml.
+ * Clic droit sur un Nexus Block (Normal ou WiFi) → ouvre le stockage.
+ *
+ * Les materials sont lus depuis itemsadder.yml :
+ *   nexus-block-normal  (fallback AMETHYST_BLOCK)
+ *   nexus-block-wifi    (fallback LIGHTNING_ROD)
+ *
+ * La vérification d'accès tient compte des membres directs ET des entreprises.
  */
 public class NexusBlockListener implements Listener {
 
     private final Main plugin;
 
-    public NexusBlockListener(Main plugin) {
-        this.plugin = plugin;
-    }
+    public NexusBlockListener(Main plugin) { this.plugin = plugin; }
 
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        if (event.getHand() != EquipmentSlot.HAND) return;
+        if (event.getClickedBlock() == null) return;
+
         Block block = event.getClickedBlock();
-        if (block == null) return;
-        if (!isNexusBlock(block)) return;
+
+        boolean isNexusBlock = plugin.getItemsAdderManager().isNexusAccessBlock(block.getType());
+        if (!isNexusBlock) return;
 
         event.setCancelled(true);
         Player player = event.getPlayer();
 
+        // Résoudre le réseau accessible par ce joueur
         NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
         if (network == null) {
-            player.sendMessage(color(plugin.getConfig().getString("messages.no-network",
-                    "&cTu ne possedes pas encore de reseau Nexus.")));
+            player.sendMessage(c(plugin.getConfig().getString("messages.no-network")));
             return;
         }
-        if (!network.hasAccess(player.getUniqueId())) {
-            player.sendMessage(color(plugin.getConfig().getString("messages.no-access",
-                    "&cAcces refuse.")));
+
+        // Vérifier l'accès : membre direct OU entreprise
+        if (!canAccess(player, network)) {
+            player.sendMessage(c(plugin.getConfig().getString("messages.no-access")));
             return;
         }
 
         plugin.getGuiManager().openStoragePage(player, network, 0);
-        player.sendMessage(color(plugin.getConfig().getString("messages.nexus-block-opened",
-                "&aAcces au stockage Nexus !")));
+        player.sendMessage(c(plugin.getConfig().getString("messages.nexus-block-opened",
+                "&aAccès au stockage Nexus !")));
     }
 
-    /** Verifie si le bloc est un bloc Nexus (normal ou WiFi), en tenant compte d'ItemsAdder. */
-    private boolean isNexusBlock(Block block) {
-        // Support ItemsAdder (si active et ID configure)
-        if (plugin.getItemsAdderManager().isEnabled()) {
-            String normalIA = plugin.getConfig().getString("nexus-blocks.normal.itemsadder", "");
-            String wifiIA   = plugin.getConfig().getString("nexus-blocks.wifi.itemsadder", "");
-            if (!normalIA.isEmpty() || !wifiIA.isEmpty()) {
-                // ItemsAdder API : LevelledMobs / ia hook — verifie via CustomBlock.byAlreadyPlaced
-                // Si les IDs sont configures, on suppose que ItemsAdderManager expose isCustomBlock()
-                // Pour l'instant, fallback vanilla si ItemsAdder n'expose pas ce bloc specifique.
-            }
-        }
-
-        // Vanilla
-        String normalMat = plugin.getConfig().getString("nexus-blocks.normal.material", "AMETHYST_BLOCK");
-        String wifiMat   = plugin.getConfig().getString("nexus-blocks.wifi.material",   "LIGHTNING_ROD");
-        Material m = block.getType();
-        try {
-            if (m == Material.valueOf(normalMat)) return true;
-            if (m == Material.valueOf(wifiMat))   return true;
-        } catch (IllegalArgumentException ignored) {}
-        return false;
+    /**
+     * Vérifie si le joueur a accès au réseau, que ce soit :
+     *  - en tant que propriétaire
+     *  - en tant que membre enregistré
+     *  - en tant que membre d'une entreprise liée au réseau
+     */
+    private boolean canAccess(Player player, NexusNetwork network) {
+        if (network.hasAccess(player.getUniqueId())) return true;
+        Company company = plugin.getCompanyManager().getByPlayer(player.getUniqueId());
+        return company != null && company.getOwner().equals(network.getOwner());
     }
 
-    private String color(String s) {
-        return ChatColor.translateAlternateColorCodes('&', s);
+    private String c(String s) {
+        return ChatColor.translateAlternateColorCodes('&', s != null ? s : "");
     }
 }

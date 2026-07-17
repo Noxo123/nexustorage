@@ -93,7 +93,8 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
             case "energycore"  -> give(player, EnergyBlockType.ENERGY_CORE);
             case "regulator"   -> give(player, EnergyBlockType.REDSTONE_REGULATOR);
             case "monitor"     -> give(player, EnergyBlockType.ENERGY_MONITOR);
-            case "chestlink"   -> { player.getInventory().addItem(plugin.buildChestLinkItem()); msg(player, "&aTu as recu un Nexus Chest Link."); }
+            case "chestlink"  -> { player.getInventory().addItem(plugin.buildChestLinkItem()); msg(player, "&aTu as recu un Nexus Chest Link."); }
+            case "connectedblock" -> { player.getInventory().addItem(plugin.buildConnectedBlockItem()); msg(player, "&aTu as recu un Nexus Connected Block."); }
             case "upgrade"     -> {
                 int tier = 1;
                 if (args.length >= 3) try { tier = Math.max(1, Math.min(3, Integer.parseInt(args[2]))); } catch (NumberFormatException ignored) {}
@@ -138,8 +139,9 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
         List<String> options = new ArrayList<>();
         if (args.length == 1) options.addAll(List.of("give", "upgrade", "access", "energy"));
         else if (args.length == 2 && args[0].equalsIgnoreCase("give"))
-            options.addAll(List.of("core", "tablet", "solarpanel", "solarpanel2", "capacitor", "capacitor2",
-                    "cable", "cable2", "interface", "energycore", "regulator", "monitor", "chestlink", "upgrade"));
+            options.addAll(List.of("core", "tablet", "connectedblock", "solarpanel", "solarpanel2",
+                    "capacitor", "capacitor2", "cable", "cable2", "interface", "energycore",
+                    "regulator", "monitor", "chestlink", "upgrade"));
         else if (args.length == 3 && args[0].equalsIgnoreCase("give") && args[1].equalsIgnoreCase("upgrade"))
             options.addAll(List.of("1", "2", "3"));
         return options.stream().filter(o -> o.startsWith(args[args.length - 1].toLowerCase())).toList();

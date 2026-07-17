@@ -45,9 +45,15 @@ public class NexusTabletListener implements Listener {
         }
 
         if (!network.hasAccess(player.getUniqueId())) {
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    plugin.getConfig().getString("messages.no-access")));
-            return;
+            // Vérifier aussi l'accès via entreprise
+            com.novusmc.nexusstorage.model.Company company =
+                    plugin.getCompanyManager().getByPlayer(player.getUniqueId());
+            boolean accessViaCompany = company != null && company.getOwner().equals(network.getOwner());
+            if (!accessViaCompany) {
+                player.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                        plugin.getConfig().getString("messages.no-access")));
+                return;
+            }
         }
 
         double cost = plugin.getConfig().getDouble("economy.cost-open-tablet", 0.0);

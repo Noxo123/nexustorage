@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * /nexus — commande principale, avec le nouveau sous-command /nexus energy.
+ * Gere les sous-commandes du plugin NexusStorage.
  */
 public class NexusCommand implements CommandExecutor, TabCompleter {
 
@@ -83,19 +83,20 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
                 player.getInventory().addItem(tablet);
                 msg(player, "&aTu as recu une Nexus Tablet.");
             }
-            case "solarpanel"  -> give(player, EnergyBlockType.SOLAR_PANEL_BASIC);
-            case "solarpanel2" -> give(player, EnergyBlockType.SOLAR_PANEL_ADVANCED);
-            case "capacitor"   -> give(player, EnergyBlockType.CAPACITOR_BASIC);
-            case "capacitor2"  -> give(player, EnergyBlockType.CAPACITOR_ADVANCED);
-            case "cable"       -> give(player, EnergyBlockType.CABLE_BASIC);
-            case "cable2"      -> give(player, EnergyBlockType.CABLE_INSULATED);
-            case "interface"   -> give(player, EnergyBlockType.INTERFACE_BLOCK);
-            case "energycore"  -> give(player, EnergyBlockType.ENERGY_CORE);
-            case "regulator"   -> give(player, EnergyBlockType.REDSTONE_REGULATOR);
-            case "monitor"     -> give(player, EnergyBlockType.ENERGY_MONITOR);
-            case "chestlink"  -> { player.getInventory().addItem(plugin.buildChestLinkItem()); msg(player, "&aTu as recu un Nexus Chest Link."); }
+            case "solarpanel"     -> give(player, EnergyBlockType.SOLAR_PANEL_BASIC);
+            case "solarpanel2"    -> give(player, EnergyBlockType.SOLAR_PANEL_ADVANCED);
+            case "capacitor"      -> give(player, EnergyBlockType.CAPACITOR_BASIC);
+            case "capacitor2"     -> give(player, EnergyBlockType.CAPACITOR_ADVANCED);
+            case "cable"          -> give(player, EnergyBlockType.CABLE_BASIC);
+            case "cable2"         -> give(player, EnergyBlockType.CABLE_INSULATED);
+            case "interface"      -> give(player, EnergyBlockType.INTERFACE_BLOCK);
+            case "electricfurnace" -> give(player, EnergyBlockType.ELECTRIC_FURNACE); // <-- AJOUT ICI !
+            case "energycore"     -> give(player, EnergyBlockType.ENERGY_CORE);
+            case "regulator"      -> give(player, EnergyBlockType.REDSTONE_REGULATOR);
+            case "monitor"        -> give(player, EnergyBlockType.ENERGY_MONITOR);
+            case "chestlink"      -> { player.getInventory().addItem(plugin.buildChestLinkItem()); msg(player, "&aTu as recu un Nexus Chest Link."); }
             case "connectedblock" -> { player.getInventory().addItem(plugin.buildConnectedBlockItem()); msg(player, "&aTu as recu un Nexus Connected Block."); }
-            case "upgrade"     -> {
+            case "upgrade"        -> {
                 int tier = 1;
                 if (args.length >= 3) try { tier = Math.max(1, Math.min(3, Integer.parseInt(args[2]))); } catch (NumberFormatException ignored) {}
                 player.getInventory().addItem(plugin.buildUpgradeCrystal(tier));
@@ -140,8 +141,8 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) options.addAll(List.of("give", "upgrade", "access", "energy"));
         else if (args.length == 2 && args[0].equalsIgnoreCase("give"))
             options.addAll(List.of("core", "tablet", "connectedblock", "solarpanel", "solarpanel2",
-                    "capacitor", "capacitor2", "cable", "cable2", "interface", "energycore",
-                    "regulator", "monitor", "chestlink", "upgrade"));
+                    "capacitor", "capacitor2", "cable", "cable2", "interface", "electricfurnace", // <-- AJOUT ICI !
+                    "energycore", "regulator", "monitor", "chestlink", "upgrade"));
         else if (args.length == 3 && args[0].equalsIgnoreCase("give") && args[1].equalsIgnoreCase("upgrade"))
             options.addAll(List.of("1", "2", "3"));
         return options.stream().filter(o -> o.startsWith(args[args.length - 1].toLowerCase())).toList();

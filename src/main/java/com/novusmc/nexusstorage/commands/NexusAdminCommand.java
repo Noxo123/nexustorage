@@ -98,10 +98,18 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
 
         String label = feature.equals("vault") ? "Vault" : "ItemsAdder (en preparation)";
         String state = newState ? "&aActive" : "&cDesactive";
-        msg(sender, plugin.getConfig().getString("messages.admin-toggle")
-                .replace("{feature}", label).replace("{state}", ChatColor.translateAlternateColorCodes('&', state)));
+        
+        // --- SAFE CONFIG RETRIEVAL ---
+        String rawMsg = plugin.getConfig().getString("messages.admin-toggle");
+        if (rawMsg == null) {
+            // Default fallback if the message is missing in config.yml
+            rawMsg = "&a[NexusStorage] &7Toggle: &e{feature} &7is now {state}";
+        }
+        
+        msg(sender, rawMsg
+                .replace("{feature}", label)
+                .replace("{state}", ChatColor.translateAlternateColorCodes('&', state)));
     }
-
     private void handleNetwork(CommandSender sender, String[] args) {
         if (args.length < 2) {
             msg(sender, "&cUsage: /nexusadmin network <joueur> [settier <n>|wipe|kickall]");

@@ -47,21 +47,25 @@ public class NexusGUIManager {
     private ItemStack named(Material material, String name, String... lore) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', name));
-        if (lore.length > 0) {
-            meta.setLore(List.of(lore).stream()
-                    .map(l -> ChatColor.translateAlternateColorCodes('&', l))
-                    .toList());
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', name));
+            if (lore.length > 0) {
+                meta.setLore(List.of(lore).stream()
+                        .map(l -> ChatColor.translateAlternateColorCodes('&', l))
+                        .toList());
+            }
+            item.setItemMeta(meta);
         }
-        item.setItemMeta(meta);
         return item;
     }
 
     private ItemStack filler() {
         ItemStack item = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(" ");
-        item.setItemMeta(meta);
+        if (meta != null) {
+            meta.setDisplayName(" ");
+            item.setItemMeta(meta);
+        }
         return item;
     }
 
@@ -121,7 +125,7 @@ public class NexusGUIManager {
         for (int i = 0; i < 54; i++) inv.setItem(i, null);
 
         List<StoredStack> allEntries = new ArrayList<>(plugin.getStorageManager().getEntries(owner).values());
-        // Filtre recherche v2
+        
         String query = holder.getSearchQuery();
         List<StoredStack> entries = query == null ? allEntries : allEntries.stream()
                 .filter(s -> {
@@ -133,6 +137,7 @@ public class NexusGUIManager {
                     return false;
                 })
                 .collect(java.util.stream.Collectors.toList());
+        
         int start = page * 45;
         for (int i = 0; i < 45; i++) {
             int index = start + i;
@@ -142,55 +147,46 @@ public class NexusGUIManager {
             }
             StoredStack stack = entries.get(index);
 
-            // La signature "source de verite" est celle du TEMPLATE stocke, jamais recalculee
-            // depuis l'item affiche (qui porte un lore decoratif ajoute ci-dessous).
             holder.setSlotSignature(i, plugin.getStorageManager().signatureOf(stack.getTemplate()));
 
             ItemStack display = stack.buildDisplayItem();
             ItemMeta meta = display.getItemMeta();
-            List<String> lore = new ArrayList<>();
-            if (meta.hasLore()) lore.addAll(meta.getLore());
-            lore.add(ChatColor.translateAlternateColorCodes('&', "&7Quantite: &f" + stack.getAmount()));
-            lore.add(ChatColor.translateAlternateColorCodes('&', "&7Clic: &f-1  &7| &7Shift+Clic droit: &f-10"));
-            meta.setLore(lore);
-            display.setItemMeta(meta);
+            if (meta != null) {
+                List<String> lore = new ArrayList<>();
+                if (meta.hasLore()) lore.addAll(meta.getLore());
+                lore.add(ChatColor.translateAlternateColorCodes('&', "&7Quantite: &f" + stack.getAmount()));
+                lore.add(ChatColor.translateAlternateColorCodes('&', "&7Clic: &f-1  &7| &7Shift+Clic droit: &f-10"));
+                meta.setLore(lore);
+                display.setItemMeta(meta);
+            }
 
             inv.setItem(i, display);
         }
 
         for (int i = 45; i < 54; i++) inv.setItem(i, filler());
 
-        // Navigation pages
-        if (page > 0) inv.setItem(45, named(Material.ARROW, "&a\u00ab Page precedente"));
-        if (page < maxPages - 1) inv.setItem(53, named(Material.ARROW, "&aPage suivante \u00bb"));
+        if (page > 0) inv.setItem(45, named(Material.ARROW, "&a« Page precedente"));
+        if (page < maxPages - 1) inv.setItem(53, named(Material.ARROW, "&aPage suivante »"));
 
-        // Livre page (slot 49)
         inv.setItem(49, named(Material.BOOK, "&fPage " + (page + 1) + "/" + maxPages,
                 "&7Types d'objets: &f" + entries.size() + " / " + (maxPages * 45)));
 
-        // Bouton "Tout deposer" (slot 46) - v2
-        String searchLabel = holder.getSearchQuery() != null
-                ? "&bRecherche: &f" + holder.getSearchQuery()
-                : "&7Aucune recherche active";
         inv.setItem(NexusStorageHolder.SLOT_DEPOSIT_ALL,
-                named(Material.HOPPER, "&a\u27A4 Tout deposer",
+                named(Material.HOPPER, "&a ➤ Tout deposer",
                         "&7Depose instantanement tout",
                         "&7l'inventaire dans le Nexus.",
                         "&eClique pour deposer."));
 
-        // Bouton "Recherche" (slot 50) - v2
+        String searchLabel = holder.getSearchQuery() != null
+                ? "&bRecherche: &f" + holder.getSearchQuery()
+                : "&7Aucune recherche active";
         inv.setItem(NexusStorageHolder.SLOT_SEARCH,
-                named(Material.COMPASS, "&b\uD83D\uDD0D Recherche",
+                named(Material.COMPASS, "&b🔍 Recherche",
                         searchLabel,
                         "&7Clique pour rechercher",
                         "&7ou effacer la recherche."));
     }
 
-    /**
-     * Rafraichit en temps reel toutes les sessions actuellement ouvertes sur le stockage
-     * d'un owner (ex: 2 joueurs regardant le meme reseau) apres une mutation, pour eviter
-     * qu'un viewer travaille sur un affichage perime (source de duplication d'items).
-     */
     public void refreshStorageViewers(UUID owner) {
         int maxPages = -1;
         for (Player online : Bukkit.getOnlinePlayers()) {
@@ -222,14 +218,16 @@ public class NexusGUIManager {
             OfflinePlayer target = Bukkit.getOfflinePlayer(entry.getKey());
             ItemStack head = new ItemStack(Material.PLAYER_HEAD);
             SkullMeta meta = (SkullMeta) head.getItemMeta();
-            meta.setOwningPlayer(target);
-            meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&f" + target.getName()));
-            meta.setLore(List.of(
-                    ChatColor.translateAlternateColorCodes('&', "&7Permission: &f" + entry.getValue().getLabel()),
-                    ChatColor.translateAlternateColorCodes('&', "&eClique gauche pour changer le niveau"),
-                    ChatColor.translateAlternateColorCodes('&', "&cClique droit pour retirer")
-            ));
-            head.setItemMeta(meta);
+            if (meta != null) {
+                meta.setOwningPlayer(target);
+                meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&f" + target.getName()));
+                meta.setLore(List.of(
+                        ChatColor.translateAlternateColorCodes('&', "&7Permission: &f" + entry.getValue().getLabel()),
+                        ChatColor.translateAlternateColorCodes('&', "&eClique gauche pour changer le niveau"),
+                        ChatColor.translateAlternateColorCodes('&', "&cClique droit pour retirer")
+                ));
+                head.setItemMeta(meta);
+            }
             inv.setItem(slot, head);
             slot++;
         }
@@ -282,7 +280,6 @@ public class NexusGUIManager {
         EnergyManager.EnergyStats stats = plugin.getEnergyManager().getStatsForOwner(network.getOwner());
         int maxPages = plugin.getUpgradeManager().getPagesForTier(network.getTier());
 
-        // --- Stats ---
         inv.setItem(10, named(Material.BOOK, "&b&lInformations reseau",
                 "&7Nom: &f" + network.getName(),
                 "&7Owner: &f" + Bukkit.getOfflinePlayer(network.getOwner()).getName(),
@@ -298,10 +295,9 @@ public class NexusGUIManager {
                 "&7Production: &f+" + Math.round(stats.production()) + "&7/cycle",
                 "&7Consommation: &f-" + Math.round(stats.consumption()) + "&7/cycle"));
 
-        // --- Gestion ---
         inv.setItem(19, named(Material.NAME_TAG, "&a&lRenommer le reseau",
                 "&7Nom actuel: &f" + network.getName(),
-                "", "&aClique pour taper un nouveau nom dans le chat"));
+                "", "&aClique pour tapez un nouveau nom dans le chat"));
 
         boolean notif = network.isNotificationsEnabled();
         inv.setItem(21, named(notif ? Material.BELL : Material.BARRIER,
@@ -321,7 +317,6 @@ public class NexusGUIManager {
 
     // ================= ENERGY DASHBOARD =================
 
-    /** Ouvert depuis un Nexus Energy Monitor place dans le monde : stats de SON reseau physique uniquement. */
     public void openEnergyMonitor(Player player, Location monitorLocation) {
         EnergyGraph graph = plugin.getEnergyManager().getGraphContaining(monitorLocation);
         if (graph == null) {
@@ -332,7 +327,6 @@ public class NexusGUIManager {
         openEnergyDashboard(player, graph, monitorLocation);
     }
 
-    /** Ouvert depuis le menu principal : vue agregee de tous les reseaux physiques de l'owner. */
     public void openEnergyOverview(Player player, NexusNetwork network) {
         EnergyManager.EnergyStats stats = plugin.getEnergyManager().getStatsForOwner(network.getOwner());
         NexusEnergyHolder holder = new NexusEnergyHolder(network.getOwner(), null);
@@ -357,7 +351,7 @@ public class NexusGUIManager {
     }
 
     private void openEnergyDashboard(Player player, EnergyGraph graph, Location monitorLocation) {
-        if (graph == null) return; // openEnergyOverview gere l'affichage agrege separement
+        if (graph == null) return;
 
         NexusEnergyHolder holder = new NexusEnergyHolder(graph.getOwnerId(), monitorLocation);
         Inventory inv = Bukkit.createInventory(holder, 27, ChatColor.translateAlternateColorCodes('&', "&e⚡ Nexus Energy Monitor"));
@@ -385,7 +379,6 @@ public class NexusGUIManager {
 
     // ================= RECHERCHE (v2) =================
 
-    /** Ouvre le stockage avec une requête de recherche pré-remplie. */
     public void openStoragePageWithSearch(Player player, NexusNetwork network, int page, String query) {
         openStoragePage(player, network, page);
         if (player.getOpenInventory().getTopInventory().getHolder() instanceof NexusStorageHolder holder) {
@@ -402,17 +395,15 @@ public class NexusGUIManager {
     public void openEnergyMarket(Player player, NexusNetwork network) {
         EnergyMarketManager.MarketData data = plugin.getEnergyMarketManager().getOrCreate(network.getOwner());
         NexusEnergyMarketHolder holder = new NexusEnergyMarketHolder(network.getOwner());
-        Inventory inv = Bukkit.createInventory(holder, 54, ChatColor.translateAlternateColorCodes('&', "&e\u26A1 Marche de l'Energie"));
+        Inventory inv = Bukkit.createInventory(holder, 54, ChatColor.translateAlternateColorCodes('&', "&e⚡ Marche de l'Energie"));
         holder.setInventory(inv);
         for (int i = 0; i < 54; i++) inv.setItem(i, filler());
 
-        // Affichage prix
         inv.setItem(NexusEnergyMarketHolder.SLOT_PRICE_DISPLAY,
                 named(Material.GOLD_INGOT, "&6Prix de vente actuel",
                         "&7" + String.format("%.2f$", data.price) + " par unite d'energie",
                         "", "&7Modifie avec les boutons - / +"));
 
-        // Boutons -/+ prix
         inv.setItem(NexusEnergyMarketHolder.SLOT_PRICE_MINUS,
                 named(Material.RED_CONCRETE, "&c- 0.10$ par unite",
                         "&7Diminue le prix de vente."));
@@ -420,26 +411,23 @@ public class NexusGUIManager {
                 named(Material.LIME_CONCRETE, "&a+ 0.10$ par unite",
                         "&7Augmente le prix de vente."));
 
-        // Stats
         long sold24h = plugin.getEnergyMarketManager().soldInLastHours(network.getOwner(), 24);
         inv.setItem(NexusEnergyMarketHolder.SLOT_STATS,
-                named(Material.BOOK, "&b\uD83D\uDCCA Statistiques",
-                        "&7Vendu (24h): &f" + sold24h + " \u26A1",
-                        "&7Total vendu : &f" + data.totalSold + " \u26A1",
+                named(Material.BOOK, "&b📊 Statistiques",
+                        "&7Vendu (24h): &f" + sold24h + " ⚡",
+                        "&7Total vendu : &f" + data.totalSold + " ⚡",
                         "&7Total gagne  : &f" + String.format("%.2f$", data.totalEarned)));
 
-        // Toggle vente auto
         Material autoMat = data.autoSell ? Material.LIME_STAINED_GLASS_PANE : Material.RED_STAINED_GLASS_PANE;
         String   autoTxt = data.autoSell ? "&aACTIVEE" : "&cDESACTIVEE";
         inv.setItem(NexusEnergyMarketHolder.SLOT_AUTOSELL,
-                named(autoMat, "&e\uD83D\uDD04 Vente automatique: " + autoTxt,
+                named(autoMat, "&e🔄 Vente automatique: " + autoTxt,
                         "&7L'exces d'energie est vendu",
                         "&7automatiquement au prix fixe.",
                         "&eClique pour basculer."));
 
-        // Retour
         inv.setItem(NexusEnergyMarketHolder.SLOT_BACK,
-                named(Material.ARROW, "&c\u2190 Retour"));
+                named(Material.ARROW, "&c← Retour"));
 
         player.openInventory(inv);
     }

@@ -62,24 +62,30 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
 
         switch (args[1].toLowerCase()) {
             case "core" -> {
-                ItemStack core = new ItemStack(Material.LODESTONE);
+                // Utilisation du manager d'ItemsAdder
+                ItemStack core = plugin.getItemsAdderManager().resolve("nexus-core");
                 ItemMeta meta = core.getItemMeta();
-                meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&d&lNexus Core"));
-                meta.setLore(List.of(ChatColor.translateAlternateColorCodes('&',
-                        "&7Pose ce bloc pour creer ou etendre ton reseau Nexus Storage.")));
-                meta.getPersistentDataContainer().set(plugin.getNexusCoreKey(), PersistentDataType.BOOLEAN, true);
-                core.setItemMeta(meta);
+                if (meta != null) {
+                    // On s'assure d'injecter la clé PDC nécessaire au fonctionnement du plugin si elle n'y est pas déjà
+                    if (!meta.getPersistentDataContainer().has(plugin.getNexusCoreKey(), PersistentDataType.BOOLEAN)) {
+                        meta.getPersistentDataContainer().set(plugin.getNexusCoreKey(), PersistentDataType.BOOLEAN, true);
+                        core.setItemMeta(meta);
+                    }
+                }
                 player.getInventory().addItem(core);
                 msg(player, "&aTu as recu un Nexus Core.");
             }
             case "tablet" -> {
-                ItemStack tablet = new ItemStack(Material.GLASS);
+                // Utilisation du manager d'ItemsAdder
+                ItemStack tablet = plugin.getItemsAdderManager().resolve("nexus-tablet");
                 ItemMeta meta = tablet.getItemMeta();
-                meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&b&lNexus Tablet"));
-                meta.setLore(List.of(ChatColor.translateAlternateColorCodes('&',
-                        "&7Clique droit pour acceder a ton stockage Nexus.")));
-                meta.getPersistentDataContainer().set(plugin.getNexusTabletKey(), PersistentDataType.BOOLEAN, true);
-                tablet.setItemMeta(meta);
+                if (meta != null) {
+                    // Injection de la clé PDC pour faire fonctionner la tablette au clic droit
+                    if (!meta.getPersistentDataContainer().has(plugin.getNexusTabletKey(), PersistentDataType.BOOLEAN)) {
+                        meta.getPersistentDataContainer().set(plugin.getNexusTabletKey(), PersistentDataType.BOOLEAN, true);
+                        tablet.setItemMeta(meta);
+                    }
+                }
                 player.getInventory().addItem(tablet);
                 msg(player, "&aTu as recu une Nexus Tablet.");
             }
@@ -90,12 +96,22 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
             case "cable"          -> give(player, EnergyBlockType.CABLE_BASIC);
             case "cable2"         -> give(player, EnergyBlockType.CABLE_INSULATED);
             case "interface"      -> give(player, EnergyBlockType.INTERFACE_BLOCK);
-            case "electricfurnace" -> give(player, EnergyBlockType.ELECTRIC_FURNACE); // <-- AJOUT ICI !
+            case "electricfurnace" -> give(player, EnergyBlockType.ELECTRIC_FURNACE);
             case "energycore"     -> give(player, EnergyBlockType.ENERGY_CORE);
             case "regulator"      -> give(player, EnergyBlockType.REDSTONE_REGULATOR);
             case "monitor"        -> give(player, EnergyBlockType.ENERGY_MONITOR);
-            case "chestlink"      -> { player.getInventory().addItem(plugin.buildChestLinkItem()); msg(player, "&aTu as recu un Nexus Chest Link."); }
-            case "connectedblock" -> { player.getInventory().addItem(plugin.buildConnectedBlockItem()); msg(player, "&aTu as recu un Nexus Connected Block."); }
+            case "chestlink"      -> { 
+                // Récupération via ItemsAdder au lieu du build en dur
+                ItemStack chestLink = plugin.getItemsAdderManager().resolve("nexus-chestlink");
+                player.getInventory().addItem(chestLink); 
+                msg(player, "&aTu as recu un Nexus Chest Link."); 
+            }
+            case "connectedblock" -> { 
+                // Récupération via ItemsAdder au lieu du build en dur
+                ItemStack connectedBlock = plugin.getItemsAdderManager().resolve("nexus-connected-block");
+                player.getInventory().addItem(connectedBlock); 
+                msg(player, "&aTu as recu un Nexus Connected Block."); 
+            }
             case "upgrade"        -> {
                 int tier = 1;
                 if (args.length >= 3) try { tier = Math.max(1, Math.min(3, Integer.parseInt(args[2]))); } catch (NumberFormatException ignored) {}
@@ -141,7 +157,7 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) options.addAll(List.of("give", "upgrade", "access", "energy"));
         else if (args.length == 2 && args[0].equalsIgnoreCase("give"))
             options.addAll(List.of("core", "tablet", "connectedblock", "solarpanel", "solarpanel2",
-                    "capacitor", "capacitor2", "cable", "cable2", "interface", "electricfurnace", // <-- AJOUT ICI !
+                    "capacitor", "capacitor2", "cable", "cable2", "interface", "electricfurnace",
                     "energycore", "regulator", "monitor", "chestlink", "upgrade"));
         else if (args.length == 3 && args[0].equalsIgnoreCase("give") && args[1].equalsIgnoreCase("upgrade"))
             options.addAll(List.of("1", "2", "3"));

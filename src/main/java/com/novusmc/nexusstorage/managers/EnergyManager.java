@@ -11,11 +11,13 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.Furnace;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.FurnaceInventory;
 
 import java.io.File;
 import java.io.IOException;
@@ -30,25 +32,18 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 
-/**
- * Gere le systeme d'energie Nexus : registre persistant des blocs physiques
- * (Solar Panel, Capacitor, Cable, Interface, Energy Core, Regulator, Monitor),
- * decouverte des reseaux connectes (BFS) et simulation de la production /
- * du transfert / de la consommation d'energie a chaque cycle.
- */
 public class EnergyManager {
 
     private static final BlockFace[] DIRECTIONS = {
             BlockFace.UP, BlockFace.DOWN, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST
     };
 
-    /** Enregistrement interne pour un bloc d'energie place dans le monde. */
     private static class BlockRecord {
         EnergyBlockType type;
         Location location;
-        UUID owner;      // uniquement pour ENERGY_CORE
-        long stored;     // uniquement pour les STORAGE
-        int threshold;   // uniquement pour les REGULATOR
+        UUID owner;      
+        long stored;     
+        int threshold;   
     }
 
     private final Main plugin;
@@ -197,7 +192,7 @@ public class EnergyManager {
                         case INTERFACE -> graph.getInterfaces().add(next);
                         case REGULATOR -> graph.getRegulators().add(next);
                         case MONITOR -> graph.getMonitors().add(next);
-                        case CORE -> { /* deux cores connectes : le second est ignore ce cycle */ }
+                        case CORE -> { }
                     }
                 }
             }
@@ -235,8 +230,6 @@ public class EnergyManager {
     }
 
     private double lossFactorFor(EnergyGraph graph) {
-        // Approxime la perte totale du reseau selon le nombre de cables traverses.
-        // Plafonnee a 60% pour eviter qu'un tres grand reseau ne devienne inutilisable.
         double basicLoss = plugin.getConfig().getDouble("energy.cable_basic.loss-per-block", 0.02);
         int cableCount = graph.getCables().size();
         return Math.min(0.6, cableCount * (basicLoss / 4.0));
@@ -244,11 +237,6 @@ public class EnergyManager {
 
     // ================= SIMULATION =================
 
-    /**
-     * Execute un cycle complet de simulation : reconstruit les reseaux,
-     * calcule production/consommation, met a jour le stockage et gere
-     * les Interfaces + Regulators.
-     */
     public void tick() {
         rebuildGraphs();
 
@@ -265,7 +253,8 @@ public class EnergyManager {
 
             distributeToStorages(graph, netProduction);
 
-            double consumed = runInterfaces(graph);
+            // Somme des consommations des interfaces et des fours
+            double consumed = runInterfaces(graph) + runElectricFurnaces(graph);
             graph.setLastConsumption(consumed);
 
             checkRegulators(graph);
@@ -325,6 +314,8 @@ public class EnergyManager {
         int maxUniqueTypes = plugin.getUpgradeManager().getPagesForTier(network.getTier()) * 45;
 
         for (Location loc : graph.getInterfaces()) {
+            if (getType(loc) != EnergyBlockType.INTERFACE_BLOCK) continue; // Sécurité si rôles partagés
+
             Inventory adjacentInv = findAdjacentInventory(loc);
             if (adjacentInv == null) continue;
 
@@ -345,6 +336,62 @@ public class EnergyManager {
             plugin.getGuiManager().refreshStorageViewers(graph.getOwnerId());
         }
         return consumed;
+    }
+
+    /**
+     * Simule le fonctionnement des Fours Électriques.
+     * Consomme beaucoup d'énergie pour accélérer ou alimenter la cuisson d'un bloc Four adjacent.
+     */
+    private double runElectricFurnaces(EnergyGraph graph) {
+        if (graph.isInterfacesPaused()) return 0;
+
+        // Grosse consommation configurable dans le config.yml (ex: 75 EU par tick)
+        double energyPerTick = plugin.getConfig().getDouble("energy.electric_furnace.energy-per-tick", 75.0);
+        double consumed = 0;
+
+        for (Location loc : graph.getInterfaces()) { 
+            // On part du principe que ELECTRIC_FURNACE a aussi le rôle Role.INTERFACE pour être capté par le BFS
+            if (getType(loc) != EnergyBlockType.ELECTRIC_FURNACE) continue;
+
+            Furnace adjacentFurnace = findAdjacentFurnace(loc);
+            if (adjacentFurnace == null) continue;
+
+            FurnaceInventory furnaceInv = adjacentFurnace.getInventory();
+            ItemStack smelting = furnaceInv.getSmelting();
+
+            // S'il y a un item à cuire et qu'il reste de la place dans le slot de sortie
+            if (smelting != null && smelting.getType() != Material.AIR) {
+                ItemStack resultSlot = furnaceInv.getResult();
+                if (resultSlot == null || resultSlot.getAmount() < resultSlot.getMaxStackSize()) {
+                    
+                    // On tente de consommer la grosse quantité d'énergie
+                    if (consumeEnergy(graph, Math.round(energyPerTick))) {
+                        consumed += energyPerTick;
+                        
+                        // Force le four à s'allumer (sans consommer de charbon vanilla)
+                        if (adjacentFurnace.getBurnTime() < 2) {
+                            adjacentFurnace.setBurnTime((short) 20); 
+                        }
+                        
+                        // Accélère la cuisson : augmente la jauge de progression
+                        short newCookTime = (short) (adjacentFurnace.getCookTime() + 5); // Avance de 5 ticks par tick réel
+                        adjacentFurnace.setCookTime(newCookTime);
+                        adjacentFurnace.update(true);
+                    }
+                }
+            }
+        }
+        return consumed;
+    }
+
+    private Furnace findAdjacentFurnace(Location electricFurnaceLoc) {
+        for (Location neighbor : neighbors(electricFurnaceLoc)) {
+            Block block = neighbor.getBlock();
+            if (block.getState() instanceof Furnace furnace) {
+                return furnace;
+            }
+        }
+        return null;
     }
 
     private ItemStack firstNonEmptySlot(Inventory inv) {
@@ -391,10 +438,6 @@ public class EnergyManager {
         }
     }
 
-    /**
-     * Retrouve le reseau d'energie (EnergyGraph) contenant un bloc donne,
-     * utilise par le Nexus Energy Monitor pour afficher les stats de SON reseau.
-     */
     public EnergyGraph getGraphContaining(Location loc) {
         for (EnergyGraph graph : graphs.values()) {
             if (graph.getCoreLocation().equals(loc)

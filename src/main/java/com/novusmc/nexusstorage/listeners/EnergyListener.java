@@ -1,9 +1,10 @@
 package com.novusmc.nexusstorage.listeners;
 
 import com.novusmc.nexusstorage.Main;
-import com.novusmc.nexusstorage.managers.EnergyManager;
 import com.novusmc.nexusstorage.model.EnergyBlockType;
 import net.md_5.bungee.api.ChatColor;
+import net.md_5.bungee.api.ChatMessageType;
+import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -31,7 +32,6 @@ public class EnergyListener implements Listener {
                 .get(plugin.getEnergyTypeKey(), PersistentDataType.STRING);
         if (typeName == null) return;
 
-        // La détection se base sur l'énumération mise à jour
         EnergyBlockType type;
         try {
             type = EnergyBlockType.valueOf(typeName);
@@ -47,7 +47,7 @@ public class EnergyListener implements Listener {
                     "&d⚡ Nexus Energy Core place. Relie tous les cables/machines adjacents a ton reseau."));
         } else if (type == EnergyBlockType.ELECTRIC_FURNACE) {
             player.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    "&c🔥 Four Electrique connecté. Place-le contre un four vanilla pour accélérer sa cuisson (Consomme beaucoup d'énergie !)."));
+                    "&a⚡ Four Électrique Nexus installé ! Ouvrez-le normalement pour l'utiliser."));
         }
     }
 
@@ -83,6 +83,11 @@ public class EnergyListener implements Listener {
         } else if (type.getRole() == EnergyBlockType.Role.MONITOR) {
             event.setCancelled(true);
             plugin.getGuiManager().openEnergyMonitor(player, event.getClickedBlock().getLocation());
+        } else if (type == EnergyBlockType.ELECTRIC_FURNACE) {
+            // L'événement n'est PAS annulé pour laisser l'interface vanilla du vrai four s'ouvrir
+            // On envoie juste une notification dans la barre d'action (Action Bar) du joueur
+            player.spigot().sendMessage(ChatMessageType.ACTION_BAR, 
+                    new TextComponent(ChatColor.translateAlternateColorCodes('&', "&a⚡ Alimentation Nexus Active (Four Électrique) ⚡")));
         }
     }
 }

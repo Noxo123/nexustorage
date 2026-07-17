@@ -30,15 +30,20 @@ public class NexusManager {
     private final File coresFile;
     private YamlConfiguration coresYml;
 
-    /** owner UUID -> NexusNetwork (cache mémoire) */
     private final Map<UUID, NexusNetwork> networks = new HashMap<>();
 
+    private final File connectedBlocksFile;
+    private YamlConfiguration connectedBlocksYml = null;
+
+
     public NexusManager(Main plugin) {
-        this.plugin    = plugin;
+        this.plugin = plugin;
+
         this.coresFile = new File(plugin.getDataFolder(), "cores.yml");
+        this.connectedBlocksFile = new File(plugin.getDataFolder(), "connected_blocks.yml");
+
         loadCoresFile();
     }
-
     // ── Fichier cores.yml ─────────────────────────────────────────────────
 
     private void loadCoresFile() {

@@ -30,6 +30,10 @@ public enum EnergyBlockType {
     INTERFACE_BLOCK(Material.HOPPER, Role.INTERFACE, "&a&lNexus Interface",
             "&7Consomme de l'energie pour transferer", "&7des items entre un coffre adjacent", "&7et ton stockage Nexus virtuel."),
 
+    // AJOUT : Le fameux four électrique réclamé par ton EnergyManager !
+    ELECTRIC_FURNACE(Material.FURNACE, Role.INTERFACE, "&6&l⚡ Electric Furnace", 
+            "&7Consomme de l'energie du reseau", "&7pour cuire des aliments ou fondre des minerais", "&7a tres grande vitesse."),
+
     ENERGY_CORE(Material.BEACON, Role.CORE, "&d&l⚡ Nexus Energy Core",
             "&7Ancre le reseau physique de cables", "&7a ton reseau Nexus. Un seul suffit", "&7par grappe de cables."),
 

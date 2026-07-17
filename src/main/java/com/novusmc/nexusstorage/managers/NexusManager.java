@@ -120,11 +120,6 @@ public class NexusManager {
         }
 
 
-        if (network.containsKey(playerUuid)) {
-            return networks.get(playerUuid);
-        }
-
-
         // membre cache
         for (NexusNetwork network : networks.values()) {
 

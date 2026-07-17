@@ -12,6 +12,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.Furnace;
+import org.bukkit.block.data.Lightable;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
@@ -340,17 +341,15 @@ public class EnergyManager {
 
     /**
      * Simule le fonctionnement des Fours Électriques.
-     * Consomme beaucoup d'énergie pour accélérer ou alimenter la cuisson d'un bloc Four adjacent.
+     * Consomme de l'énergie pour alimenter et accélérer la cuisson d'un bloc Four adjacent.
      */
     private double runElectricFurnaces(EnergyGraph graph) {
         if (graph.isInterfacesPaused()) return 0;
 
-        // Grosse consommation configurable dans le config.yml (ex: 75 EU par tick)
         double energyPerTick = plugin.getConfig().getDouble("energy.electric_furnace.energy-per-tick", 75.0);
         double consumed = 0;
 
         for (Location loc : graph.getInterfaces()) { 
-            // On part du principe que ELECTRIC_FURNACE a aussi le rôle Role.INTERFACE pour être capté par le BFS
             if (getType(loc) != EnergyBlockType.ELECTRIC_FURNACE) continue;
 
             Furnace adjacentFurnace = findAdjacentFurnace(loc);
@@ -359,25 +358,43 @@ public class EnergyManager {
             FurnaceInventory furnaceInv = adjacentFurnace.getInventory();
             ItemStack smelting = furnaceInv.getSmelting();
 
-            // S'il y a un item à cuire et qu'il reste de la place dans le slot de sortie
+            // S'il y a un item à cuire
             if (smelting != null && smelting.getType() != Material.AIR) {
                 ItemStack resultSlot = furnaceInv.getResult();
-                if (resultSlot == null || resultSlot.getAmount() < resultSlot.getMaxStackSize()) {
+                
+                // On s'assure qu'on peut empiler le résultat de la cuisson dans le slot de sortie
+                if (resultSlot == null || resultSlot.getType() == Material.AIR || 
+                    (resultSlot.getAmount() < resultSlot.getMaxStackSize())) {
                     
-                    // On tente de consommer la grosse quantité d'énergie
+                    // Consomme l'énergie requise pour ce tick de cuisson
                     if (consumeEnergy(graph, Math.round(energyPerTick))) {
                         consumed += energyPerTick;
                         
-                        // Force le four à s'allumer (sans consommer de charbon vanilla)
+                        // Force l'allumage visuel et fonctionnel du four (sans charbon)
                         if (adjacentFurnace.getBurnTime() < 2) {
-                            adjacentFurnace.setBurnTime((short) 20); 
+                            adjacentFurnace.setBurnTime((short) 40); 
                         }
                         
-                        // Accélère la cuisson : augmente la jauge de progression
-                        short newCookTime = (short) (adjacentFurnace.getCookTime() + 5); // Avance de 5 ticks par tick réel
+                        // Allumage visuel de la texture en jeu (compatibilité BlockData 1.13+)
+                        if (adjacentFurnace.getBlockData() instanceof Lightable lightable) {
+                            if (!lightable.isLit()) {
+                                lightable.setLit(true);
+                                adjacentFurnace.setBlockData(lightable);
+                            }
+                        }
+                        
+                        // Accélère la cuisson : avance de 5 ticks par tick réel
+                        short newCookTime = (short) (adjacentFurnace.getCookTime() + 5);
                         adjacentFurnace.setCookTime(newCookTime);
-                        adjacentFurnace.update(true);
+                        adjacentFurnace.update(true, false); // Évite de trigger d'inutiles updates physiques de blocs voisins
                     }
+                }
+            } else {
+                // Si rien ne cuit, on éteint doucement la texture du four s'il était allumé électriquement
+                if (adjacentFurnace.getBlockData() instanceof Lightable lightable && lightable.isLit() && adjacentFurnace.getCookTime() == 0) {
+                    lightable.setLit(false);
+                    adjacentFurnace.setBlockData(lightable);
+                    adjacentFurnace.update(true, false);
                 }
             }
         }

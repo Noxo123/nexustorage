@@ -14,11 +14,6 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 
-/**
- * Gere la pose et la destruction des blocs du systeme d'energie, ainsi que
- * l'interaction avec le Regulator (cycle de seuil) et le Monitor (ouverture
- * du tableau de bord). Voir NexusGUIListener pour le GUI du Monitor.
- */
 public class EnergyListener implements Listener {
 
     private final Main plugin;
@@ -36,6 +31,7 @@ public class EnergyListener implements Listener {
                 .get(plugin.getEnergyTypeKey(), PersistentDataType.STRING);
         if (typeName == null) return;
 
+        // La détection se base sur l'énumération mise à jour
         EnergyBlockType type;
         try {
             type = EnergyBlockType.valueOf(typeName);
@@ -49,6 +45,9 @@ public class EnergyListener implements Listener {
         if (type.getRole() == EnergyBlockType.Role.CORE) {
             player.sendMessage(ChatColor.translateAlternateColorCodes('&',
                     "&d⚡ Nexus Energy Core place. Relie tous les cables/machines adjacents a ton reseau."));
+        } else if (type == EnergyBlockType.ELECTRIC_FURNACE) {
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                    "&c🔥 Four Electrique connecté. Place-le contre un four vanilla pour accélérer sa cuisson (Consomme beaucoup d'énergie !)."));
         }
     }
 
@@ -58,7 +57,6 @@ public class EnergyListener implements Listener {
         EnergyBlockType type = plugin.getEnergyManager().getType(event.getBlock().getLocation());
         plugin.getEnergyManager().unregisterBlock(event.getBlock().getLocation());
 
-        // Rend l'item d'origine (avec son PDC) plutot que le drop vanilla brut.
         if (type != null) {
             event.setDropItems(false);
             event.getBlock().getWorld().dropItemNaturally(

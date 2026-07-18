@@ -204,7 +204,7 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
                 msg(sender, "&aNexus Tablet donnee à " + target.getName() + ".");
             }
             case "chestlink" -> {
-                target.getInventory().addItem(plugin.getItemsAdderManager().resolve("nexus-chest-link"));
+                target.getInventory().addItem(plugin.getItemsAdderManager().resolve("nexus-chestlink"));
                 msg(sender, "&aNexus Chest Link donne à " + target.getName() + ".");
             }
             case "connectedblock" -> {

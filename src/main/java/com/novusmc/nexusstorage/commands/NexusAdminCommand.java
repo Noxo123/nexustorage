@@ -35,6 +35,7 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
     }
 
     private void msg(CommandSender sender, String s) {
+        if (s == null) return;
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&', s));
     }
 
@@ -71,7 +72,13 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
             case "toggle"  -> handleToggle(sender, args);
             case "network" -> handleNetwork(sender, args);
             case "give"    -> handleGive(sender, args);
-            case "set"     -> handleSet(sender, args);
+            case "set"     -> {
+                if (sender instanceof Player player) {
+                    handleSet(player, args);
+                } else {
+                    msg(sender, "&cCette commande ne peut être exécutée que par un joueur.");
+                }
+            }
             default        -> msg(sender, "&cUsage: /nexusadmin [gui|reload|toggle|network|give|set]");
         }
         return true;
@@ -105,8 +112,11 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
 
         String label = feature.equals("vault") ? "Vault" : "ItemsAdder (en preparation)";
         String state = newState ? "&aActive" : "&cDesactive";
-        msg(sender, plugin.getConfig().getString("messages.admin-toggle")
-                .replace("{feature}", label).replace("{state}", ChatColor.translateAlternateColorCodes('&', state)));
+        
+        String rawMsg = plugin.getConfig().getString("messages.admin-toggle");
+        if (rawMsg != null) {
+            msg(sender, rawMsg.replace("{feature}", label).replace("{state}", ChatColor.translateAlternateColorCodes('&', state)));
+        }
     }
 
     private void handleNetwork(CommandSender sender, String[] args) {
@@ -221,12 +231,13 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
             case "energycore"      -> giveEnergyItem(sender, target, EnergyBlockType.ENERGY_CORE);
             case "regulator"       -> giveEnergyItem(sender, target, EnergyBlockType.REDSTONE_REGULATOR);
             case "monitor"         -> giveEnergyItem(sender, target, EnergyBlockType.ENERGY_MONITOR);
-            case "shielddome" -> giveEnergyItem(sender, target, EnergyBlockType.SHIELD_DOME);
+            case "shielddome"      -> giveEnergyItem(sender, target, EnergyBlockType.SHIELD_DOME);
             default -> msg(sender, "&cType d'item inconnu.");
         }
     }
 
     private void giveEnergyItem(CommandSender sender, Player target, EnergyBlockType type) {
+        if (type == null) return;
         target.getInventory().addItem(plugin.buildEnergyItem(type));
         String cleanName = type.getDisplayName().replaceAll("&[0-9a-fk-orA-FK-OR]", "");
         msg(sender, "&a" + cleanName + " donne à " + target.getName() + ".");
@@ -310,7 +321,7 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")) {
             options.addAll(List.of("core", "tablet", "chestlink", "connectedblock", "upgrade", "solarpanel", 
                     "solarpanel2", "capacitor", "capacitor2", "cable", "cable2", "interface", 
-                    "electricfurnace", "energycore", "regulator", "monitor"));
+                    "electricfurnace", "energycore", "regulator", "monitor", "shielddome"));
         } else if (args.length == 4 && args[0].equalsIgnoreCase("give") && args[2].equalsIgnoreCase("upgrade")) {
             options.addAll(List.of("1", "2", "3"));
         }

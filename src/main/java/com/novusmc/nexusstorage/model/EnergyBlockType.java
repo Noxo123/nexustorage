@@ -30,7 +30,7 @@ public enum EnergyBlockType {
     INTERFACE_BLOCK(Material.HOPPER, Role.INTERFACE, "&a&lNexus Interface",
             "&7Consomme de l'energie pour transferer", "&7des items entre un coffre adjacent", "&7et ton stockage Nexus virtuel."),
 
-    // AJOUT : Le fameux four électrique réclamé par ton EnergyManager !
+    // Le four électrique réclamé par ton EnergyManager
     ELECTRIC_FURNACE(Material.FURNACE, Role.INTERFACE, "&6&l⚡ Electric Furnace", 
             "&7Consomme de l'energie du reseau", "&7pour cuire des aliments ou fondre des minerais", "&7a tres grande vitesse."),
 
@@ -42,10 +42,12 @@ public enum EnergyBlockType {
             "&7Clique pour augmenter le seuil,", "&7shift-clique pour le baisser."),
 
     ENERGY_MONITOR(Material.LECTERN, Role.MONITOR, "&f&lNexus Energy Monitor",
-            "&7Clique droit pour voir les statistiques", "&7en temps reel du reseau d'energie.");
+            "&7Clique droit pour voir les statistiques", "&7en temps reel du reseau d'energie."),
 
-    SHIELD_DOME("shield_dome", "&5Générateur de Dôme", 0, -10000, 0) 
-// Nom, DisplayName, Capacité de stockage (0 si branché au réseau), Production (-10000 = consommation), Tier requis
+    // AJOUT CORRIGÉ : Intégration parfaite dans la structure existante
+    SHIELD_DOME(Material.CRYING_OBSIDIAN, Role.INTERFACE, "&5&l⚡ Shield Generator",
+            "&7Générateur de dôme énergétique.", "&7Consomme 10k FE par heure pour", "&7protéger une zone de 200x200.");
+
     public enum Role { SOURCE, STORAGE, CABLE, INTERFACE, CORE, REGULATOR, MONITOR }
 
     private final Material material;

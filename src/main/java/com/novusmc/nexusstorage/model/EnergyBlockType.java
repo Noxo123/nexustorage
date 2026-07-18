@@ -44,6 +44,8 @@ public enum EnergyBlockType {
     ENERGY_MONITOR(Material.LECTERN, Role.MONITOR, "&f&lNexus Energy Monitor",
             "&7Clique droit pour voir les statistiques", "&7en temps reel du reseau d'energie.");
 
+    SHIELD_DOME("shield_dome", "&5Générateur de Dôme", 0, -10000, 0) 
+// Nom, DisplayName, Capacité de stockage (0 si branché au réseau), Production (-10000 = consommation), Tier requis
     public enum Role { SOURCE, STORAGE, CABLE, INTERFACE, CORE, REGULATOR, MONITOR }
 
     private final Material material;

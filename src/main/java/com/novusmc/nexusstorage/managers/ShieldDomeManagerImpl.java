@@ -4,7 +4,6 @@ import com.novusmc.nexusstorage.Main;
 import com.novusmc.nexusstorage.model.NexusNetwork;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -18,10 +17,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Implémentation du gestionnaire de dôme avec effets de statut et affichage visuel.
- */
 public class ShieldDomeManagerImpl implements ShieldDomeManager, Listener {
+    // Reste du code inchangé...
 
     private final Main plugin;
     private final Map<Location, UUID> activeDomes = new HashMap<>();

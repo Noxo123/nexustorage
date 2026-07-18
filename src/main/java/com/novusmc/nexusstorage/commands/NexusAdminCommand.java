@@ -221,6 +221,7 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
             case "energycore"      -> giveEnergyItem(sender, target, EnergyBlockType.ENERGY_CORE);
             case "regulator"       -> giveEnergyItem(sender, target, EnergyBlockType.REDSTONE_REGULATOR);
             case "monitor"         -> giveEnergyItem(sender, target, EnergyBlockType.ENERGY_MONITOR);
+            case "shielddome" -> giveEnergyItem(sender, target, EnergyBlockType.SHIELD_DOME);
             default -> msg(sender, "&cType d'item inconnu.");
         }
     }

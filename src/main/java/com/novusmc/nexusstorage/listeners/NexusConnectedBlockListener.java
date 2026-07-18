@@ -18,23 +18,13 @@ import org.bukkit.persistence.PersistentDataType;
 import java.util.UUID;
 
 /**
- * Gère le Nexus Connected Block : un bloc physique posé dans le monde qui,
- * une fois associé à un réseau Nexus, ouvre directement l'interface de
- * stockage au clic droit — sans avoir besoin de la Tablet.
- *
- * Cycle de vie :
- *  • Pose  → si l'item a le PDC nexus_connected_block=true, on enregistre la
- *            position dans connected_blocks.yml avec l'UUID du poseur.
- *  • Clic  → ouvre le stockage du réseau associé (vérification d'accès incluse).
- *  • Casse → dés-enregistre le bloc et rend l'item au joueur.
- *
- * Le material du bloc (vanilla ou ItemsAdder) est défini dans itemsadder.yml
- * sous la clé "nexus-connected-block".
+ * Gère le Nexus Connected Block : un bloc physique posé dans le monde qui
+ * est lié définitivement à son poseur (l'owner). Quand un joueur clique dessus,
+ * cela ouvre le réseau de l'owner (si le joueur a les permissions requises).
  */
 public class NexusConnectedBlockListener implements Listener {
 
     private final Main plugin;
-    private static final String PDC_KEY = "nexus_connected_block";
 
     public NexusConnectedBlockListener(Main plugin) {
         this.plugin = plugin;
@@ -54,7 +44,7 @@ public class NexusConnectedBlockListener implements Listener {
         Player player = event.getPlayer();
         Location loc  = event.getBlock().getLocation();
 
-        // Vérifie que le joueur possède bien un réseau
+        // Vérifie que le poseur possède bien un réseau à lui
         NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
         if (network == null) {
             player.sendMessage(c(plugin.getConfig().getString("messages.no-network")));
@@ -62,10 +52,9 @@ public class NexusConnectedBlockListener implements Listener {
             return;
         }
 
-        // Enregistre la position liée à l'owner du réseau
+        // Enregistre la position liée à l'owner (le poseur)
         plugin.getNexusManager().registerConnectedBlock(loc, network.getOwner());
-        player.sendMessage(c("&aNexus Connected Block &7posé et lié au réseau &f" + network.getName() + "&7."));
-        player.sendMessage(c("&7Clic droit dessus pour ouvrir le stockage."));
+        player.sendMessage(c("&aNexus Connected Block &7posé et lié à votre réseau &f" + network.getName() + "&7."));
     }
 
     // ── Clic droit ────────────────────────────────────────────────────────
@@ -84,31 +73,53 @@ public class NexusConnectedBlockListener implements Listener {
         event.setCancelled(true);
         Player player = event.getPlayer();
 
+        // 1. Récupérer l'UUID du propriétaire d'origine du bloc
         UUID ownerUuid = plugin.getNexusManager().getConnectedBlockOwner(loc);
         if (ownerUuid == null) {
             player.sendMessage(c("&cCe bloc n'est associé à aucun réseau. Cassez-le et replacez-le."));
             return;
         }
 
-        // Charger le réseau de l'owner
-        NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(ownerUuid);
+        // 2. Charger le réseau du PROPRIÉTAIRE du bloc
+        NexusNetwork ownerNetwork = plugin.getNexusManager().getOrCreateNetwork(ownerUuid);
+        if (ownerNetwork == null) {
+            player.sendMessage(c("&cLe réseau associé à ce bloc n'existe plus."));
+            return;
+        }
 
-        // Vérifier l'accès du joueur cliqueur
-        if (!network.hasAccess(player.getUniqueId())) {
-            // Vérifier aussi via entreprise
-            com.novusmc.nexusstorage.model.Company company =
+        // 3. Vérifier les accès du joueur qui vient de cliquer
+        boolean hasAccess = false;
+
+        // Cas A : Le cliqueur est le propriétaire lui-même
+        if (player.getUniqueId().equals(ownerUuid)) {
+            hasAccess = true;
+        } 
+        // Cas B : Le cliqueur a reçu la permission partagée dans le Nexus
+        else if (ownerNetwork.hasAccess(player.getUniqueId())) {
+            hasAccess = true;
+        } 
+        // Cas C : Le cliqueur fait partie de l'entreprise (Company) de l'owner
+        else {
+            com.novusmc.nexusstorage.model.Company company = 
                     plugin.getCompanyManager().getByPlayer(player.getUniqueId());
-            boolean accessViaCompany = company != null && company.getOwner().equals(ownerUuid);
-
-            if (!accessViaCompany) {
-                player.sendMessage(c(plugin.getConfig().getString("messages.no-access")));
-                return;
+            if (company != null && company.getOwner().equals(ownerUuid)) {
+                hasAccess = true;
             }
         }
 
-        plugin.getGuiManager().openStoragePage(player, network, 0);
-        player.sendMessage(c(plugin.getConfig().getString("messages.nexus-block-opened",
-                "&aAccès au stockage Nexus !")));
+        // Si aucun accès n'est valide, on refuse l'ouverture
+        if (!hasAccess) {
+            player.sendMessage(c(plugin.getConfig().getString("messages.no-access", "&cTu n'as pas l'accès au réseau de ce bloc !")));
+            return;
+        }
+
+        // 4. OUVERTURE : On ouvre bien le réseau de l'owner (ownerNetwork) à la personne qui clique (player)
+        plugin.getGuiManager().openStoragePage(player, ownerNetwork, 0);
+        
+        String openedMessage = plugin.getConfig().getString("messages.nexus-block-opened", "&aAccès au stockage Nexus de %owner% !");
+        // Remplacement dynamique du nom si tu veux afficher le nom du propriétaire dans le message
+        openedMessage = openedMessage.replace("%owner%", ownerNetwork.getName());
+        player.sendMessage(c(openedMessage));
     }
 
     // ── Casse ─────────────────────────────────────────────────────────────
@@ -118,20 +129,21 @@ public class NexusConnectedBlockListener implements Listener {
         Location loc = event.getBlock().getLocation();
         if (!plugin.getNexusManager().isConnectedBlock(loc)) return;
 
-        event.setCancelled(true); // on gère nous-mêmes
+        event.setCancelled(true); 
         Player player = event.getPlayer();
 
-        java.util.UUID ownerUuid = plugin.getNexusManager().getConnectedBlockOwner(loc);
+        UUID ownerUuid = plugin.getNexusManager().getConnectedBlockOwner(loc);
 
-        // Seul l'owner ou un admin peut casser le bloc
-        boolean isOwner  = ownerUuid != null && ownerUuid.equals(player.getUniqueId());
-        boolean isAdmin  = player.hasPermission("nexusstorage.admin");
+        // Seul l'owner du bloc ou un admin avec permission peut détruire l'installation
+        boolean isOwner = ownerUuid != null && ownerUuid.equals(player.getUniqueId());
+        boolean isAdmin = player.hasPermission("nexusstorage.admin");
+        
         if (!isOwner && !isAdmin) {
-            player.sendMessage(c("&cSeul le propriétaire du réseau peut casser ce bloc."));
+            player.sendMessage(c("&cSeul le propriétaire de ce réseau peut récupérer ce bloc."));
             return;
         }
 
-        // Retirer le bloc et rendre l'item
+        // Retirer le bloc
         plugin.getNexusManager().unregisterConnectedBlock(loc);
         event.getBlock().setType(Material.AIR);
 

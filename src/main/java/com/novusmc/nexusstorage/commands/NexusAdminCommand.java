@@ -2,9 +2,7 @@ package com.novusmc.nexusstorage.commands;
 
 import com.novusmc.nexusstorage.Main;
 import com.novusmc.nexusstorage.model.EnergyBlockType;
-import com.novusmc.nexusstorage.model.NexusNetwork;
 import net.md_5.bungee.api.ChatColor;
-import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -21,14 +19,14 @@ import java.util.List;
 import java.util.logging.Level;
 
 /**
- * Gère les sous-commandes du plugin NexusStorage.
+ * Gère les commandes administratives du Nexus (Give et Configuration ItemsAdder).
  */
-public class NexusCommand implements CommandExecutor, TabCompleter {
+public class NexusAdminCommand implements CommandExecutor, TabCompleter {
 
     private final Main plugin;
 
-    public NexusCommand(Main plugin) { 
-        this.plugin = plugin; 
+    public NexusAdminCommand(Main plugin) {
+        this.plugin = plugin;
     }
 
     private void msg(CommandSender s, String m) {
@@ -42,37 +40,28 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        if (!player.hasPermission("nexusstorage.admin")) {
+            msg(player, "&cPermission refusée.");
+            return true;
+        }
+
         if (args.length == 0) {
-            NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
-            if (network == null) { 
-                msg(player, plugin.getConfig().getString("messages.no-network")); 
-                return true; 
-            }
-            plugin.getGuiManager().openMainMenu(player, network);
+            msg(player, "&cUsage: /" + label + " [give|set]");
             return true;
         }
 
         switch (args[0].toLowerCase()) {
-            case "give"    -> handleGive(player, args);
-            case "set"     -> handleSet(player, args); // Intégration propre de la commande set
-            case "upgrade" -> handleUpgrade(player);
-            case "access"  -> handleAccess(player);
-            case "energy"  -> handleEnergy(player);
-            default        -> msg(player, "&cUsage: /nexus [give|set|upgrade|access|energy]");
+            case "give" -> handleGive(player, args);
+            case "set"  -> handleSet(player, args);
+            default     -> msg(player, "&cUsage: /" + label + " [give|set]");
         }
         return true;
     }
 
-    // ── Gционной command: GIVE ─────────────────────────────────────────────
-
     private void handleGive(Player player, String[] args) {
-        if (args.length < 2) { 
-            msg(player, "&cUsage: /nexus give <core|tablet|...>"); 
-            return; 
-        }
-        if (!player.hasPermission("nexusstorage.admin")) { 
-            msg(player, "&cPermission refusée."); 
-            return; 
+        if (args.length < 2) {
+            msg(player, "&cUsage: /nexusadmin give <item|upgrade>");
+            return;
         }
 
         switch (args[1].toLowerCase()) {
@@ -100,32 +89,32 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
                 player.getInventory().addItem(tablet);
                 msg(player, "&aTu as reçu une Nexus Tablet.");
             }
-            case "solarpanel"      -> give(player, EnergyBlockType.SOLAR_PANEL_BASIC);
-            case "solarpanel2"     -> give(player, EnergyBlockType.SOLAR_PANEL_ADVANCED);
-            case "capacitor"       -> give(player, EnergyBlockType.CAPACITOR_BASIC);
-            case "capacitor2"      -> give(player, EnergyBlockType.CAPACITOR_ADVANCED);
-            case "cable"           -> give(player, EnergyBlockType.CABLE_BASIC);
-            case "cable2"          -> give(player, EnergyBlockType.CABLE_INSULATED);
-            case "interface"       -> give(player, EnergyBlockType.INTERFACE_BLOCK);
-            case "electricfurnace" -> give(player, EnergyBlockType.ELECTRIC_FURNACE);
-            case "energycore"      -> give(player, EnergyBlockType.ENERGY_CORE);
-            case "regulator"       -> give(player, EnergyBlockType.REDSTONE_REGULATOR);
-            case "monitor"         -> give(player, EnergyBlockType.ENERGY_MONITOR);
-            case "chestlink"       -> { 
+            case "solarpanel"      -> giveEnergyItem(player, EnergyBlockType.SOLAR_PANEL_BASIC);
+            case "solarpanel2"     -> giveEnergyItem(player, EnergyBlockType.SOLAR_PANEL_ADVANCED);
+            case "capacitor"       -> giveEnergyItem(player, EnergyBlockType.CAPACITOR_BASIC);
+            case "capacitor2"      -> giveEnergyItem(player, EnergyBlockType.CAPACITOR_ADVANCED);
+            case "cable"           -> giveEnergyItem(player, EnergyBlockType.CABLE_BASIC);
+            case "cable2"          -> giveEnergyItem(player, EnergyBlockType.CABLE_INSULATED);
+            case "interface"       -> giveEnergyItem(player, EnergyBlockType.INTERFACE_BLOCK);
+            case "electricfurnace" -> giveEnergyItem(player, EnergyBlockType.ELECTRIC_FURNACE);
+            case "energycore"      -> giveEnergyItem(player, EnergyBlockType.ENERGY_CORE);
+            case "regulator"       -> giveEnergyItem(player, EnergyBlockType.REDSTONE_REGULATOR);
+            case "monitor"         -> giveEnergyItem(player, EnergyBlockType.ENERGY_MONITOR);
+            case "chestlink"       -> {
                 ItemStack chestLink = plugin.getItemsAdderManager().resolve("nexus-chestlink");
-                player.getInventory().addItem(chestLink); 
-                msg(player, "&aTu as reçu un Nexus Chest Link."); 
+                player.getInventory().addItem(chestLink);
+                msg(player, "&aTu as reçu un Nexus Chest Link.");
             }
-            case "connectedblock"  -> { 
+            case "connectedblock"  -> {
                 ItemStack connectedBlock = plugin.getItemsAdderManager().resolve("nexus-connected-block");
-                player.getInventory().addItem(connectedBlock); 
-                msg(player, "&aTu as reçu un Nexus Connected Block."); 
+                player.getInventory().addItem(connectedBlock);
+                msg(player, "&aTu as reçu un Nexus Connected Block.");
             }
-            case "upgrade"         -> {
+            case "upgrade" -> {
                 int tier = 1;
                 if (args.length >= 3) {
-                    try { 
-                        tier = Math.max(1, Math.min(3, Integer.parseInt(args[2]))); 
+                    try {
+                        tier = Math.max(1, Math.min(3, Integer.parseInt(args[2])));
                     } catch (NumberFormatException ignored) {}
                 }
                 player.getInventory().addItem(plugin.buildUpgradeCrystal(tier));
@@ -135,27 +124,20 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void give(Player player, EnergyBlockType type) {
+    private void giveEnergyItem(Player player, EnergyBlockType type) {
         player.getInventory().addItem(plugin.buildEnergyItem(type));
-        msg(player, "&aTu as reçu: &f" + type.getDisplayName().replaceAll("&[0-9a-fk-orA-FK-OR]", ""));
+        msg(player, "&aTu as reçu : &f" + type.getDisplayName().replaceAll("&[0-9a-fk-orA-FK-OR]", ""));
     }
 
-    // ── Admin command: SET ────────────────────────────────────────────────
-
     private void handleSet(Player player, String[] args) {
-        if (!player.hasPermission("nexusstorage.admin")) { 
-            msg(player, "&cPermission refusée."); 
-            return; 
-        }
-
         if (args.length < 2) {
-            msg(player, "&cUsage: /nexus set <core|tablet|chestlink|connectedblock>");
+            msg(player, "&cUsage: /nexusadmin set <core|tablet|chestlink|connectedblock>");
             return;
         }
 
         String targetKey = args[1].toLowerCase();
         if (!List.of("core", "tablet", "chestlink", "connectedblock").contains(targetKey)) {
-            msg(player, "&cType inconnu. Choix: core, tablet, chestlink, connectedblock");
+            msg(player, "&cType inconnu. Choix : core, tablet, chestlink, connectedblock");
             return;
         }
 
@@ -169,7 +151,7 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
         try {
             Class<?> csClass = Class.forName("dev.lone.itemsadder.api.CustomStack");
             Object customStack = csClass.getMethod("byItemStack", ItemStack.class).invoke(null, itemInHand);
-            
+
             if (customStack != null) {
                 itemsAdderId = (String) csClass.getMethod("getNamespacedID").invoke(customStack);
             }
@@ -196,10 +178,10 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
         try {
             File file = new File(plugin.getDataFolder(), "itemsadder.yml");
             iaConfig.save(file);
-            
+
             msg(player, "&a&lSuccès ! &7La clé &e" + configKey + " &7a été liée à : &b" + itemsAdderId);
             msg(player, "&7Matériau de fallback défini sur : &f" + itemInHand.getType().name());
-            
+
             plugin.getItemsAdderManager().reload();
         } catch (IOException e) {
             msg(player, "&cErreur lors de la sauvegarde du fichier itemsadder.yml.");
@@ -207,43 +189,12 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    // ── Player commands ───────────────────────────────────────────────────
-
-    private void handleUpgrade(Player player) {
-        NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
-        if (network == null) { 
-            msg(player, plugin.getConfig().getString("messages.no-network")); 
-            return; 
-        }
-        plugin.getGuiManager().openUpgradeMenu(player, network);
-    }
-
-    private void handleAccess(Player player) {
-        NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
-        if (network == null) { 
-            msg(player, plugin.getConfig().getString("messages.no-network")); 
-            return; 
-        }
-        plugin.getGuiManager().openAccessMenu(player, network);
-    }
-
-    private void handleEnergy(Player player) {
-        NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(player.getUniqueId());
-        if (network == null) { 
-            msg(player, plugin.getConfig().getString("messages.no-network")); 
-            return; 
-        }
-        plugin.getGuiManager().openEnergyMarket(player, network);
-    }
-
-    // ── Tab Completer ─────────────────────────────────────────────────────
-
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> options = new ArrayList<>();
-        
+
         if (args.length == 1) {
-            options.addAll(List.of("give", "set", "upgrade", "access", "energy"));
+            options.addAll(List.of("give", "set"));
         } 
         else if (args.length == 2) {
             if (args[0].equalsIgnoreCase("give")) {
@@ -257,7 +208,7 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
         else if (args.length == 3 && args[0].equalsIgnoreCase("give") && args[1].equalsIgnoreCase("upgrade")) {
             options.addAll(List.of("1", "2", "3"));
         }
-        
+
         return options.stream()
                 .filter(o -> o.toLowerCase().startsWith(args[args.length - 1].toLowerCase()))
                 .toList();

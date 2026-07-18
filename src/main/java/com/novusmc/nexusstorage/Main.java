@@ -22,6 +22,8 @@ import com.novusmc.nexusstorage.managers.NexusAccessManager;
 import com.novusmc.nexusstorage.managers.NexusManager;
 import com.novusmc.nexusstorage.managers.NexusStorageManager;
 import com.novusmc.nexusstorage.managers.NexusUpgradeManager;
+import com.novusmc.nexusstorage.managers.ShieldDomeManager;
+import com.novusmc.nexusstorage.managers.ShieldDomeManagerImpl;
 import com.novusmc.nexusstorage.model.EnergyBlockType;
 import com.novusmc.nexusstorage.util.ConfigManager;
 import net.md_5.bungee.api.ChatColor;
@@ -57,6 +59,7 @@ public class Main extends JavaPlugin {
     private ChestLinkManager chestLinkManager;
     private CompanyManager companyManager;
     private EnergyMarketManager energyMarketManager;
+    private ShieldDomeManager shieldDomeManager; // Ajout du manager de dôme
 
     private NamespacedKey nexusCoreKey;
     private NamespacedKey nexusTabletKey;
@@ -70,11 +73,11 @@ public class Main extends JavaPlugin {
         saveDefaultConfig();
         new ConfigManager(this).mergeDefaultConfig();
 
-        nexusCoreKey          = new NamespacedKey(this, "nexus_core");
-        nexusTabletKey        = new NamespacedKey(this, "nexus_tablet");
-        energyTypeKey         = new NamespacedKey(this, "nexus_energy_type");
-        chestLinkKey          = new NamespacedKey(this, "nexus_chest_link");
-        upgradeCrystalKey     = new NamespacedKey(this, "nexus_upgrade_crystal");
+        nexusCoreKey           = new NamespacedKey(this, "nexus_core");
+        nexusTabletKey         = new NamespacedKey(this, "nexus_tablet");
+        energyTypeKey          = new NamespacedKey(this, "nexus_energy_type");
+        chestLinkKey           = new NamespacedKey(this, "nexus_chest_link");
+        upgradeCrystalKey      = new NamespacedKey(this, "nexus_upgrade_crystal");
         nexusConnectedBlockKey = new NamespacedKey(this, "nexus_connected_block");
 
         this.accessManager       = new NexusAccessManager(this);
@@ -88,15 +91,22 @@ public class Main extends JavaPlugin {
         this.chestLinkManager    = new ChestLinkManager(this);
         this.companyManager      = new CompanyManager(this);
         this.energyMarketManager = new EnergyMarketManager(this);
+        
+        // Initialisation de l'implémentation du dôme
+        ShieldDomeManagerImpl domeImpl = new ShieldDomeManagerImpl(this);
+        this.shieldDomeManager   = domeImpl;
 
-        getServer().getPluginManager().registerEvents(new NexusCoreListener(this),          this);
-        getServer().getPluginManager().registerEvents(new NexusTabletListener(this),        this);
-        getServer().getPluginManager().registerEvents(new NexusGUIListener(this),           this);
-        getServer().getPluginManager().registerEvents(new EnergyListener(this),             this);
-        getServer().getPluginManager().registerEvents(new ChestLinkListener(this),          this);
-        getServer().getPluginManager().registerEvents(new NexusBlockListener(this),         this);
-        getServer().getPluginManager().registerEvents(new NexusConnectedBlockListener(this),this);
+        // Enregistrement des Listeners natifs
+        getServer().getPluginManager().registerEvents(new NexusCoreListener(this),           this);
+        getServer().getPluginManager().registerEvents(new NexusTabletListener(this),         this);
+        getServer().getPluginManager().registerEvents(new NexusGUIListener(this),            this);
+        getServer().getPluginManager().registerEvents(new EnergyListener(this),              this);
+        getServer().getPluginManager().registerEvents(new ChestLinkListener(this),           this);
+        getServer().getPluginManager().registerEvents(new NexusBlockListener(this),          this);
+        getServer().getPluginManager().registerEvents(new NexusConnectedBlockListener(this), this);
+        getServer().getPluginManager().registerEvents(domeImpl,                              this); // Enregistrement des événements du dôme
 
+        // Enregistrement sécurisé des commandes via réflexion
         NexusCommand nexusCmd = new NexusCommand(this);
         registerCommandSafely("nexus", nexusCmd, nexusCmd);
 
@@ -161,40 +171,46 @@ public class Main extends JavaPlugin {
     public ItemStack buildConnectedBlockItem() {
         ItemStack item = getItemsAdderManager().resolve("nexus-connected-block");
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&d&lNexus Connected Block"));
-        meta.setLore(List.of(
-                ChatColor.translateAlternateColorCodes('&', "&7Pose ce bloc n'importe ou."),
-                ChatColor.translateAlternateColorCodes('&', "&7Clic droit pour ouvrir ton stockage Nexus."),
-                ChatColor.translateAlternateColorCodes('&', "&eLie automatiquement a ton reseau a la pose.")
-        ));
-        meta.getPersistentDataContainer().set(nexusConnectedBlockKey, PersistentDataType.BOOLEAN, true);
-        item.setItemMeta(meta);
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&d&lNexus Connected Block"));
+            meta.setLore(List.of(
+                    ChatColor.translateAlternateColorCodes('&', "&7Pose ce bloc n'importe ou."),
+                    ChatColor.translateAlternateColorCodes('&', "&7Clic droit pour ouvrir ton stockage Nexus."),
+                    ChatColor.translateAlternateColorCodes('&', "&eLie automatiquement a ton reseau a la pose.")
+            ));
+            meta.getPersistentDataContainer().set(nexusConnectedBlockKey, PersistentDataType.BOOLEAN, true);
+            item.setItemMeta(meta);
+        }
         return item;
     }
 
     public ItemStack buildEnergyItem(EnergyBlockType type) {
         ItemStack item = new ItemStack(type.getMaterial());
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', type.getDisplayName()));
-        if (type.getLore().length > 0)
-            meta.setLore(List.of(type.getLore()).stream().map(l -> ChatColor.translateAlternateColorCodes('&', l)).toList());
-        meta.getPersistentDataContainer().set(energyTypeKey, PersistentDataType.STRING, type.name());
-        item.setItemMeta(meta);
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', type.getDisplayName()));
+            if (type.getLore().length > 0)
+                meta.setLore(List.of(type.getLore()).stream().map(l -> ChatColor.translateAlternateColorCodes('&', l)).toList());
+            meta.getPersistentDataContainer().set(energyTypeKey, PersistentDataType.STRING, type.name());
+            item.setItemMeta(meta);
+        }
         return item;
     }
 
     public ItemStack buildChestLinkItem() {
         ItemStack item = new ItemStack(org.bukkit.Material.ENDER_CHEST);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&6&lNexus Chest Link"));
-        meta.setLore(List.of(
-                ChatColor.translateAlternateColorCodes('&', "&7Pose ce bloc a cote d'un coffre"),
-                ChatColor.translateAlternateColorCodes('&', "&7simple ou double pour le connecter"),
-                ChatColor.translateAlternateColorCodes('&', "&7a ton stockage Nexus virtuel."),
-                ChatColor.translateAlternateColorCodes('&', "&eClique avec un Upgrade Crystal pour l'ameliorer.")
-        ));
-        meta.getPersistentDataContainer().set(chestLinkKey, PersistentDataType.BOOLEAN, true);
-        item.setItemMeta(meta);
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&6&lNexus Chest Link"));
+            meta.setLore(List.of(
+                    ChatColor.translateAlternateColorCodes('&', "&7Pose ce bloc a cote d'un coffre"),
+                    ChatColor.translateAlternateColorCodes('&', "&7simple ou double pour le connecter"),
+                    ChatColor.translateAlternateColorCodes('&', "&7a ton stockage Nexus virtuel."),
+                    ChatColor.translateAlternateColorCodes('&', "&eClique avec un Upgrade Crystal pour l'ameliorer.")
+            ));
+            meta.getPersistentDataContainer().set(chestLinkKey, PersistentDataType.BOOLEAN, true);
+            item.setItemMeta(meta);
+        }
         return item;
     }
 
@@ -206,28 +222,33 @@ public class Main extends JavaPlugin {
         };
         ItemStack item = new ItemStack(mat);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&d&lNexus Upgrade Crystal &7[Tier " + tier + "]"));
-        meta.setLore(List.of(
-                ChatColor.translateAlternateColorCodes('&', "&7Item premium tres rare."),
-                ChatColor.translateAlternateColorCodes('&', "&7Clique droit sur un Nexus Chest Link"),
-                ChatColor.translateAlternateColorCodes('&', "&7pour ameliorer sa vitesse de transfert.")
-        ));
-        meta.getPersistentDataContainer().set(upgradeCrystalKey, PersistentDataType.INTEGER, tier);
-        item.setItemMeta(meta);
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', "&d&lNexus Upgrade Crystal &7[Tier " + tier + "]"));
+            meta.setLore(List.of(
+                    ChatColor.translateAlternateColorCodes('&', "&7Item premium tres rare."),
+                    ChatColor.translateAlternateColorCodes('&', "&7Clique droit sur un Nexus Chest Link"),
+                    ChatColor.translateAlternateColorCodes('&', "&7pour ameliorer sa vitesse de transfert.")
+            ));
+            meta.getPersistentDataContainer().set(upgradeCrystalKey, PersistentDataType.INTEGER, tier);
+            item.setItemMeta(meta);
+        }
         return item;
     }
 
-    public NexusManager          getNexusManager()        { return nexusManager; }
-    public NexusAccessManager    getAccessManager()       { return accessManager; }
-    public NexusStorageManager   getStorageManager()      { return storageManager; }
-    public NexusUpgradeManager   getUpgradeManager()      { return upgradeManager; }
-    public EconomyManager        getEconomyManager()      { return economyManager; }
-    public ItemsAdderManager     getItemsAdderManager()   { return itemsAdderManager; }
+    // Getters globaux
+    public NexusManager        getNexusManager()        { return nexusManager; }
+    public NexusAccessManager   getAccessManager()       { return accessManager; }
+    public NexusStorageManager  getStorageManager()      { return storageManager; }
+    public NexusUpgradeManager  getUpgradeManager()      { return upgradeManager; }
+    public EconomyManager       getEconomyManager()      { return economyManager; }
+    public ItemsAdderManager    getItemsAdderManager()   { return itemsAdderManager; }
     public NexusGUIManager       getGuiManager()          { return guiManager; }
-    public EnergyManager         getEnergyManager()       { return energyManager; }
-    public ChestLinkManager      getChestLinkManager()    { return chestLinkManager; }
-    public CompanyManager        getCompanyManager()      { return companyManager; }
-    public EnergyMarketManager   getEnergyMarketManager() { return energyMarketManager; }
+    public EnergyManager        getEnergyManager()       { return energyManager; }
+    public ChestLinkManager     getChestLinkManager()    { return chestLinkManager; }
+    public CompanyManager       getCompanyManager()      { return companyManager; }
+    public EnergyMarketManager  getEnergyMarketManager() { return energyMarketManager; }
+    public ShieldDomeManager    getShieldDomeManager()   { return shieldDomeManager; } // Getter pour le Dôme
+
     public NamespacedKey getNexusCoreKey()           { return nexusCoreKey; }
     public NamespacedKey getNexusTabletKey()         { return nexusTabletKey; }
     public NamespacedKey getEnergyTypeKey()          { return energyTypeKey; }

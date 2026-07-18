@@ -3,28 +3,37 @@ main: com.novusmc.nexusstorage.Main
 version: 2.0.0
 api-version: '1.21'
 author: NovusMC
-description: Systeme de stockage interconnecte SMP premium avec entreprises, energie et marche.
+description: Stockage interconnecte SMP premium avec entreprises, energie, marche et domes de protection.
 softdepend: [Vault, PlaceholderAPI, ItemsAdder]
 
 commands:
   nexus:
-    description: Commande principale de NexusStorage
+    description: Commande principale NexusStorage
     usage: /nexus [give|upgrade|access|energy]
     permission: nexusstorage.use
-    permission-message: "Tu n'as pas la permission d'utiliser NexusStorage."
+    permission-message: "&cTu n'as pas la permission d'utiliser NexusStorage."
   nexusadmin:
-    description: Commandes d'administration de NexusStorage
-    usage: /nexusadmin [gui|reload|toggle|network|give]
+    description: Commandes d'administration NexusStorage
+    usage: /nexusadmin [gui|reload|toggle|network|give|set]
     permission: nexusstorage.admin
-    permission-message: "Tu n'as pas la permission d'utiliser les commandes admin NexusStorage."
+    permission-message: "&cPermission administrateur requise."
   company:
     description: Gestion des entreprises Nexus
-    usage: /company <create|invite|accept|decline|info|members|leave|help>
+    usage: /company <create|invite|accept|decline|info|members|leave|kick|help>
     aliases: [comp]
     permission: nexusstorage.use
+    permission-message: "&cTu n'as pas la permission d'utiliser les entreprises NexusStorage."
 
 permissions:
   nexusstorage.use:
+    description: Permet d'utiliser les commandes de base de NexusStorage
     default: true
+  nexusstorage.give:
+    description: Permet d'utiliser /nexus give (obtenir des blocs)
+    default: op
   nexusstorage.admin:
+    description: Permet d'utiliser /nexusadmin et toutes les commandes admin
+    default: op
+  nexusstorage.bypass.dome:
+    description: Permet de casser des blocs dans une zone protegee par un dome
     default: op

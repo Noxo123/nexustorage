@@ -376,9 +376,12 @@ public class NexusGUIListener implements Listener {
                 return;
             }
             final String query = message;
+            final UUID finalSearchOwner = searchOwner;
             Bukkit.getScheduler().runTask(plugin, () -> {
+                // On charge le reseau du proprietaire (searchOwner), pas celui du chercheur
+                // pour que les membres puissent aussi utiliser la recherche
                 com.novusmc.nexusstorage.model.NexusNetwork network =
-                        plugin.getNexusManager().getNetworkIfExists(playerUuid);
+                        plugin.getNexusManager().getOrCreateNetwork(finalSearchOwner);
                 if (network != null)
                     plugin.getGuiManager().openStoragePageWithSearch(player, network, 0, query);
             });

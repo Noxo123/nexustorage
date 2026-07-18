@@ -63,6 +63,8 @@ energy:
     energy-per-item: 5
   regulator:
     default-threshold: 20
+  electric_furnace:
+    energy-per-tick: 75.0
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CHEST LINK
@@ -130,3 +132,6 @@ messages:
   company-left: "&aTu as quitte l'entreprise."
   company-dissolved: "&cEntreprise dissoute."
   admin-reloaded: "&aConfiguration NexusStorage rechargee."
+  admin-toggle: "&a{feature} est maintenant: &f{state}"
+  admin-no-permission: "&cPermission administrateur requise."
+  admin-network-not-found: "&cAucun reseau Nexus trouve pour ce joueur."

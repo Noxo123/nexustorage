@@ -180,28 +180,27 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
         String itemType = args[2].toLowerCase();
         switch (itemType) {
             case "core" -> {
+                // Toujours forcer le PDC, que l'item vienne d'ItemsAdder ou de vanilla
                 ItemStack core = plugin.getItemsAdderManager().resolve("nexus-core");
                 ItemMeta meta = core.getItemMeta();
                 if (meta != null) {
-                    if (!meta.getPersistentDataContainer().has(plugin.getNexusCoreKey(), PersistentDataType.BOOLEAN)) {
-                        meta.getPersistentDataContainer().set(plugin.getNexusCoreKey(), PersistentDataType.BOOLEAN, true);
-                        core.setItemMeta(meta);
-                    }
+                    meta.setDisplayName(net.md_5.bungee.api.ChatColor.translateAlternateColorCodes('&', "&d&lNexus Core"));
+                    meta.getPersistentDataContainer().set(plugin.getNexusCoreKey(), org.bukkit.persistence.PersistentDataType.BOOLEAN, true);
+                    core.setItemMeta(meta);
                 }
                 target.getInventory().addItem(core);
-                msg(sender, "&aNexus Core donne à " + target.getName() + ".");
+                msg(sender, "&aNexus Core donne a " + target.getName() + ".");
             }
             case "tablet" -> {
                 ItemStack tablet = plugin.getItemsAdderManager().resolve("nexus-tablet");
                 ItemMeta meta = tablet.getItemMeta();
                 if (meta != null) {
-                    if (!meta.getPersistentDataContainer().has(plugin.getNexusTabletKey(), PersistentDataType.BOOLEAN)) {
-                        meta.getPersistentDataContainer().set(plugin.getNexusTabletKey(), PersistentDataType.BOOLEAN, true);
-                        tablet.setItemMeta(meta);
-                    }
+                    meta.setDisplayName(net.md_5.bungee.api.ChatColor.translateAlternateColorCodes('&', "&b&lNexus Tablet"));
+                    meta.getPersistentDataContainer().set(plugin.getNexusTabletKey(), org.bukkit.persistence.PersistentDataType.BOOLEAN, true);
+                    tablet.setItemMeta(meta);
                 }
                 target.getInventory().addItem(tablet);
-                msg(sender, "&aNexus Tablet donnee à " + target.getName() + ".");
+                msg(sender, "&aNexus Tablet donnee a " + target.getName() + ".");
             }
             case "chestlink" -> {
                 target.getInventory().addItem(plugin.getItemsAdderManager().resolve("nexus-chestlink"));

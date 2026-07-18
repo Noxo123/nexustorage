@@ -134,3 +134,18 @@ gui-icon-search:
 gui-filler:
   itemsadder: "default"
   fallback: "GRAY_STAINED_GLASS_PANE"
+
+energy-electric-furnace:
+  itemsadder: "default"
+  fallback: "FURNACE"
+
+
+energy-shield-dome:
+  itemsadder: "default"
+  fallback: "CRYING_OBSIDIAN"
+
+
+# Alias utilisé dans NexusAdminCommand.handleGive pour 'chestlink'
+nexus-chestlink:
+  itemsadder: "default"
+  fallback: "ENDER_CHEST"

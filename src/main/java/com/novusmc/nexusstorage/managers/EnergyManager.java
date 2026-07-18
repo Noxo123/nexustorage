@@ -15,24 +15,21 @@ import org.bukkit.block.Furnace;
 import org.bukkit.block.data.Lightable;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.FurnaceInventory;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.FurnaceInventory;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.logging.Level;
 
+/**
+ * Gestionnaire du reseau d'energie physique de cables (style RF/FE).
+ * Les roles INTERFACE, FURNACE et SHIELD sont SEPARES pour eviter
+ * que runInterfaces() ne tente de cuire des items dans un Shield Generator.
+ */
 public class EnergyManager {
 
     private static final BlockFace[] DIRECTIONS = {
@@ -42,19 +39,23 @@ public class EnergyManager {
     private static class BlockRecord {
         EnergyBlockType type;
         Location location;
-        UUID owner;      
-        long stored;     
-        int threshold;   
+        UUID owner;
+        long stored;
+        int threshold;
     }
 
     private final Main plugin;
     private final File file;
     private final Map<String, BlockRecord> registry = new HashMap<>();
-    private final Map<Location, EnergyGraph> graphs = new HashMap<>();
+    private final Map<Location, EnergyGraph> graphs  = new HashMap<>();
+
+    // Listes separees par role dans chaque graphe (evite les boucles incorrectes)
+    private final Map<Location, List<Location>> graphFurnaces = new HashMap<>();
+    private final Map<Location, List<Location>> graphShields  = new HashMap<>();
 
     public EnergyManager(Main plugin) {
         this.plugin = plugin;
-        this.file = new File(plugin.getDataFolder(), "energy_blocks.yml");
+        this.file   = new File(plugin.getDataFolder(), "energy_blocks.yml");
         load();
     }
 
@@ -62,7 +63,7 @@ public class EnergyManager {
         return loc.getWorld().getName() + ";" + loc.getBlockX() + ";" + loc.getBlockY() + ";" + loc.getBlockZ();
     }
 
-    // ================= PERSISTENCE =================
+    // ─── Persistence ──────────────────────────────────────────────────────
 
     private void load() {
         if (!file.exists()) return;
@@ -72,22 +73,18 @@ public class EnergyManager {
                 String typeName = yml.getString(key + ".type");
                 if (typeName == null) continue;
                 EnergyBlockType type = EnergyBlockType.valueOf(typeName);
-
                 String[] parts = key.split(";");
                 World world = Bukkit.getWorld(parts[0]);
                 if (world == null) continue;
                 Location loc = new Location(world, Integer.parseInt(parts[1]), Integer.parseInt(parts[2]), Integer.parseInt(parts[3]));
-
-                BlockRecord record = new BlockRecord();
-                record.type = type;
-                record.location = loc;
-                record.stored = yml.getLong(key + ".stored", 0);
-                record.threshold = yml.getInt(key + ".threshold",
-                        plugin.getConfig().getInt("energy.regulator.default-threshold", 20));
+                BlockRecord r = new BlockRecord();
+                r.type      = type;
+                r.location  = loc;
+                r.stored    = yml.getLong(key + ".stored", 0);
+                r.threshold = yml.getInt(key + ".threshold", plugin.getConfig().getInt("energy.regulator.default-threshold", 20));
                 String ownerStr = yml.getString(key + ".owner");
-                if (ownerStr != null) record.owner = UUID.fromString(ownerStr);
-
-                registry.put(key, record);
+                if (ownerStr != null) r.owner = UUID.fromString(ownerStr);
+                registry.put(key, r);
             } catch (Exception e) {
                 plugin.getLogger().warning("Entree energy_blocks.yml invalide ignoree: " + key);
             }
@@ -104,60 +101,49 @@ public class EnergyManager {
             yml.set(key + ".threshold", r.threshold);
             if (r.owner != null) yml.set(key + ".owner", r.owner.toString());
         }
-        try {
-            yml.save(file);
-        } catch (IOException e) {
-            plugin.getLogger().log(Level.SEVERE, "Impossible de sauvegarder energy_blocks.yml", e);
-        }
+        try { yml.save(file); }
+        catch (IOException e) { plugin.getLogger().log(Level.SEVERE, "Impossible de sauvegarder energy_blocks.yml", e); }
     }
 
-    // ================= REGISTRE =================
+    // ─── Registre ─────────────────────────────────────────────────────────
 
     public void registerBlock(Location location, EnergyBlockType type, Player placer) {
-        BlockRecord record = new BlockRecord();
-        record.type = type;
-        record.location = location.clone();
-        if (type.getRole() == EnergyBlockType.Role.CORE) {
-            record.owner = placer.getUniqueId();
-        }
-        if (type.getRole() == EnergyBlockType.Role.REGULATOR) {
-            record.threshold = plugin.getConfig().getInt("energy.regulator.default-threshold", 20);
-        }
-        registry.put(keyFor(location), record);
+        BlockRecord r = new BlockRecord();
+        r.type     = type;
+        r.location = location.clone();
+        if (type.getRole() == EnergyBlockType.Role.CORE) r.owner = placer.getUniqueId();
+        if (type.getRole() == EnergyBlockType.Role.REGULATOR)
+            r.threshold = plugin.getConfig().getInt("energy.regulator.default-threshold", 20);
+        registry.put(keyFor(location), r);
     }
 
-    public void unregisterBlock(Location location) {
-        registry.remove(keyFor(location));
-    }
-
-    public boolean isEnergyBlock(Location location) {
-        return registry.containsKey(keyFor(location));
-    }
-
+    public void unregisterBlock(Location location) { registry.remove(keyFor(location)); }
+    public boolean isEnergyBlock(Location location) { return registry.containsKey(keyFor(location)); }
     public EnergyBlockType getType(Location location) {
         BlockRecord r = registry.get(keyFor(location));
         return r == null ? null : r.type;
     }
-
     public int cycleThreshold(Location location, boolean increase) {
         BlockRecord r = registry.get(keyFor(location));
         if (r == null || r.type.getRole() != EnergyBlockType.Role.REGULATOR) return -1;
         r.threshold = Math.max(0, Math.min(100, r.threshold + (increase ? 5 : -5)));
         return r.threshold;
     }
+    public int registrySize() { return registry.size(); }
 
-    // ================= BFS / GRAPHES =================
+    // ─── BFS / Graphes ────────────────────────────────────────────────────
 
     private List<Location> neighbors(Location loc) {
         List<Location> result = new ArrayList<>(6);
-        for (BlockFace face : DIRECTIONS) {
+        for (BlockFace face : DIRECTIONS)
             result.add(loc.clone().add(face.getModX(), face.getModY(), face.getModZ()));
-        }
         return result;
     }
 
     private void rebuildGraphs() {
         graphs.clear();
+        graphFurnaces.clear();
+        graphShields.clear();
         Set<String> visited = new HashSet<>();
 
         for (BlockRecord record : registry.values()) {
@@ -166,6 +152,8 @@ public class EnergyManager {
             if (visited.contains(coreKey)) continue;
 
             EnergyGraph graph = new EnergyGraph(record.location.clone(), record.owner);
+            List<Location> furnaces = new ArrayList<>();
+            List<Location> shields  = new ArrayList<>();
             visited.add(coreKey);
 
             Deque<Location> queue = new ArrayDeque<>();
@@ -176,107 +164,107 @@ public class EnergyManager {
                 for (Location next : neighbors(current)) {
                     String nextKey = keyFor(next);
                     if (visited.contains(nextKey)) continue;
-                    BlockRecord neighborRecord = registry.get(nextKey);
-                    if (neighborRecord == null) continue;
-
+                    BlockRecord nr = registry.get(nextKey);
+                    if (nr == null) continue;
                     visited.add(nextKey);
                     queue.add(next);
 
-                    switch (neighborRecord.type.getRole()) {
-                        case CABLE -> graph.getCables().add(next);
-                        case SOURCE -> graph.getSources().add(next);
-                        case STORAGE -> {
+                    switch (nr.type.getRole()) {
+                        case CABLE     -> graph.getCables().add(next);
+                        case SOURCE    -> graph.getSources().add(next);
+                        case STORAGE   -> {
                             graph.getStorages().add(next);
-                            graph.setTotalCapacity(graph.getTotalCapacity() + capacityOf(neighborRecord.type));
-                            graph.setTotalStored(graph.getTotalStored() + neighborRecord.stored);
+                            graph.setTotalCapacity(graph.getTotalCapacity() + capacityOf(nr.type));
+                            graph.setTotalStored(graph.getTotalStored() + nr.stored);
                         }
                         case INTERFACE -> graph.getInterfaces().add(next);
+                        case FURNACE   -> furnaces.add(next);
+                        case SHIELD    -> shields.add(next);
                         case REGULATOR -> graph.getRegulators().add(next);
-                        case MONITOR -> graph.getMonitors().add(next);
-                        case CORE -> { }
+                        case MONITOR   -> graph.getMonitors().add(next);
+                        case CORE      -> {} // deux cores connectes : second ignore
                     }
                 }
             }
-
             graphs.put(record.location, graph);
+            graphFurnaces.put(record.location, furnaces);
+            graphShields.put(record.location, shields);
         }
     }
 
+    // ─── Production / capacite ────────────────────────────────────────────
+
     private long capacityOf(EnergyBlockType type) {
         return switch (type) {
-            case CAPACITOR_BASIC -> plugin.getConfig().getLong("energy.capacitor_basic.capacity", 10000);
-            case CAPACITOR_ADVANCED -> plugin.getConfig().getLong("energy.capacitor_advanced.capacity", 100000);
+            case CAPACITOR_BASIC     -> plugin.getConfig().getLong("energy.capacitor_basic.capacity", 10_000);
+            case CAPACITOR_ADVANCED  -> plugin.getConfig().getLong("energy.capacitor_advanced.capacity", 100_000);
             default -> 0;
         };
     }
 
     private double productionOf(EnergyBlockType type, Location loc) {
-        Block block = loc.getBlock();
-        World world = loc.getWorld();
-        boolean skyExposed = block.getLightFromSky() >= 15;
-        boolean isDay = world.isDayTime();
-        double weatherFactor = world.hasStorm() ? 0.35 : 1.0;
-
-        if (!skyExposed || !isDay) return 0;
-
+        Block block  = loc.getBlock();
+        World world  = loc.getWorld();
+        boolean sky  = block.getLightFromSky() >= 15;
+        boolean day  = world.isDayTime();
+        double wf    = world.hasStorm() ? 0.35 : 1.0;
+        if (!sky || !day) return 0;
         return switch (type) {
-            case SOLAR_PANEL_BASIC -> plugin.getConfig().getDouble("energy.solar_panel_basic.production", 20) * weatherFactor;
+            case SOLAR_PANEL_BASIC    -> plugin.getConfig().getDouble("energy.solar_panel_basic.production", 20) * wf;
             case SOLAR_PANEL_ADVANCED -> {
-                int minY = plugin.getConfig().getInt("energy.solar_panel_advanced.min-y", 100);
-                if (loc.getBlockY() < minY) yield 0.0;
-                yield plugin.getConfig().getDouble("energy.solar_panel_advanced.production", 60) * weatherFactor;
+                if (loc.getBlockY() < plugin.getConfig().getInt("energy.solar_panel_advanced.min-y", 100)) yield 0.0;
+                yield plugin.getConfig().getDouble("energy.solar_panel_advanced.production", 60) * wf;
             }
             default -> 0.0;
         };
     }
 
     private double lossFactorFor(EnergyGraph graph) {
-        double basicLoss = plugin.getConfig().getDouble("energy.cable_basic.loss-per-block", 0.02);
-        int cableCount = graph.getCables().size();
-        return Math.min(0.6, cableCount * (basicLoss / 4.0));
+        double lossPerBlock = plugin.getConfig().getDouble("energy.cable_basic.loss-per-block", 0.02);
+        return Math.min(0.6, graph.getCables().size() * (lossPerBlock / 4.0));
     }
 
-    // ================= SIMULATION =================
+    // ─── Simulation ───────────────────────────────────────────────────────
 
     public void tick() {
         rebuildGraphs();
+        for (Map.Entry<Location, EnergyGraph> entry : graphs.entrySet()) {
+            Location coreLoc = entry.getKey();
+            EnergyGraph graph = entry.getValue();
 
-        for (EnergyGraph graph : graphs.values()) {
             double production = 0;
             for (Location src : graph.getSources()) {
-                EnergyBlockType type = getType(src);
-                if (type != null) production += productionOf(type, src);
+                EnergyBlockType t = getType(src);
+                if (t != null) production += productionOf(t, src);
             }
+            double net = production * (1 - lossFactorFor(graph));
+            graph.setLastProduction(net);
+            distributeToStorages(graph, net);
 
-            double loss = lossFactorFor(graph);
-            double netProduction = production * (1 - loss);
-            graph.setLastProduction(netProduction);
+            // Vente auto de l'exces
+            tryAutoSell(graph, coreLoc);
 
-            distributeToStorages(graph, netProduction);
-
-            // Somme des consommations des interfaces et des fours
-            double consumed = runInterfaces(graph) + runElectricFurnaces(graph);
+            double consumed = runInterfaces(graph)
+                    + runElectricFurnaces(graph, graphFurnaces.getOrDefault(coreLoc, Collections.emptyList()));
             graph.setLastConsumption(consumed);
 
             checkRegulators(graph);
         }
-
         saveAll();
     }
 
     private void distributeToStorages(EnergyGraph graph, double amount) {
         if (amount <= 0 || graph.getStorages().isEmpty()) return;
         long toDistribute = Math.round(amount);
-
-        for (Location storageLoc : graph.getStorages()) {
+        for (Location loc : graph.getStorages()) {
             if (toDistribute <= 0) break;
-            BlockRecord record = registry.get(keyFor(storageLoc));
-            if (record == null) continue;
-            long capacity = capacityOf(record.type);
-            long space = capacity - record.stored;
+            BlockRecord r = registry.get(keyFor(loc));
+            if (r == null) continue;
+            long cap = capacityOf(r.type);
+            long space = cap - r.stored;
             if (space <= 0) continue;
             long add = Math.min(space, toDistribute);
-            record.stored += add;
+            r.stored += add;
             toDistribute -= add;
         }
     }
@@ -291,9 +279,7 @@ public class EnergyManager {
     }
 
     private boolean consumeEnergy(EnergyGraph graph, long amount) {
-        long available = totalStoredOf(graph);
-        if (available < amount) return false;
-
+        if (totalStoredOf(graph) < amount) return false;
         long remaining = amount;
         for (Location loc : graph.getStorages()) {
             if (remaining <= 0) break;
@@ -306,154 +292,128 @@ public class EnergyManager {
         return true;
     }
 
+    /** Vente automatique de l'exces d'energie via EnergyMarketManager. */
+    private void tryAutoSell(EnergyGraph graph, Location coreLoc) {
+        if (graph.getOwnerId() == null) return;
+        UUID owner = graph.getOwnerId();
+        EnergyMarketManager.MarketData data = plugin.getEnergyMarketManager().getOrCreate(owner);
+        if (!data.autoSell) return;
+
+        // Calcule le surplus au-dessus de 90% de capacite
+        long stored   = totalStoredOf(graph);
+        long capacity = graph.getTotalCapacity();
+        if (capacity <= 0) return;
+        long threshold = (long) (capacity * 0.9);
+        long surplus   = stored - threshold;
+        if (surplus <= 0) return;
+
+        // Consomme l'energie en surplus et la vend
+        if (!consumeEnergy(graph, surplus)) return;
+        Player ownerOnline = Bukkit.getPlayer(owner);
+        plugin.getEnergyMarketManager().trySell(owner, surplus, ownerOnline);
+    }
+
+    /** Transfert items coffre -> stockage Nexus, consomme de l'energie. */
     private double runInterfaces(EnergyGraph graph) {
         if (graph.isInterfacesPaused() || graph.getOwnerId() == null) return 0;
-
         double energyPerItem = plugin.getConfig().getDouble("energy.interface_block.energy-per-item", 5);
         double consumed = 0;
         NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(graph.getOwnerId());
-        int maxUniqueTypes = plugin.getUpgradeManager().getPagesForTier(network.getTier()) * 45;
+        int maxTypes = plugin.getUpgradeManager().getPagesForTier(network.getTier()) * 45;
 
         for (Location loc : graph.getInterfaces()) {
-            if (getType(loc) != EnergyBlockType.INTERFACE_BLOCK) continue; // Sécurité si rôles partagés
-
-            Inventory adjacentInv = findAdjacentInventory(loc);
-            if (adjacentInv == null) continue;
-
-            ItemStack toMove = firstNonEmptySlot(adjacentInv);
+            Inventory adj = findAdjacentInventory(loc);
+            if (adj == null) continue;
+            ItemStack toMove = firstNonEmpty(adj);
             if (toMove == null) continue;
-
             if (!consumeEnergy(graph, Math.round(energyPerItem))) continue;
-
             ItemStack single = toMove.clone();
             single.setAmount(1);
-            boolean absorbed = plugin.getStorageManager().deposit(graph.getOwnerId(), single, maxUniqueTypes);
-            if (absorbed) {
+            if (plugin.getStorageManager().deposit(graph.getOwnerId(), single, maxTypes)) {
                 toMove.setAmount(toMove.getAmount() - 1);
                 consumed += energyPerItem;
             }
         }
-        if (consumed > 0) {
-            plugin.getGuiManager().refreshStorageViewers(graph.getOwnerId());
-        }
+        if (consumed > 0) plugin.getGuiManager().refreshStorageViewers(graph.getOwnerId());
         return consumed;
     }
 
-    /**
-     * Simule le fonctionnement des Fours Électriques.
-     * Consomme de l'énergie pour alimenter et accélérer la cuisson d'un bloc Four adjacent.
-     */
-    private double runElectricFurnaces(EnergyGraph graph) {
-        if (graph.isInterfacesPaused()) return 0;
-
+    /** Cuisson acceleree via blocs FURNACE du reseau. */
+    private double runElectricFurnaces(EnergyGraph graph, List<Location> furnaceLocs) {
+        if (graph.isInterfacesPaused() || furnaceLocs.isEmpty()) return 0;
         double energyPerTick = plugin.getConfig().getDouble("energy.electric_furnace.energy-per-tick", 75.0);
         double consumed = 0;
-
-        for (Location loc : graph.getInterfaces()) { 
-            if (getType(loc) != EnergyBlockType.ELECTRIC_FURNACE) continue;
-
-            Furnace adjacentFurnace = findAdjacentFurnace(loc);
-            if (adjacentFurnace == null) continue;
-
-            FurnaceInventory furnaceInv = adjacentFurnace.getInventory();
-            ItemStack smelting = furnaceInv.getSmelting();
-
-            // S'il y a un item à cuire
-            if (smelting != null && smelting.getType() != Material.AIR) {
-                ItemStack resultSlot = furnaceInv.getResult();
-                
-                // On s'assure qu'on peut empiler le résultat de la cuisson dans le slot de sortie
-                if (resultSlot == null || resultSlot.getType() == Material.AIR || 
-                    (resultSlot.getAmount() < resultSlot.getMaxStackSize())) {
-                    
-                    // Consomme l'énergie requise pour ce tick de cuisson
-                    if (consumeEnergy(graph, Math.round(energyPerTick))) {
-                        consumed += energyPerTick;
-                        
-                        // Force l'allumage visuel et fonctionnel du four (sans charbon)
-                        if (adjacentFurnace.getBurnTime() < 2) {
-                            adjacentFurnace.setBurnTime((short) 40); 
-                        }
-                        
-                        // Allumage visuel de la texture en jeu (compatibilité BlockData 1.13+)
-                        if (adjacentFurnace.getBlockData() instanceof Lightable lightable) {
-                            if (!lightable.isLit()) {
-                                lightable.setLit(true);
-                                adjacentFurnace.setBlockData(lightable);
-                            }
-                        }
-                        
-                        // Accélère la cuisson : avance de 5 ticks par tick réel
-                        short newCookTime = (short) (adjacentFurnace.getCookTime() + 5);
-                        adjacentFurnace.setCookTime(newCookTime);
-                        adjacentFurnace.update(true, false); // Évite de trigger d'inutiles updates physiques de blocs voisins
-                    }
+        for (Location loc : furnaceLocs) {
+            Furnace adj = findAdjacentFurnace(loc);
+            if (adj == null) continue;
+            FurnaceInventory inv = adj.getInventory();
+            ItemStack smelting = inv.getSmelting();
+            if (smelting == null || smelting.getType() == Material.AIR) {
+                // Eteindre visuellement le four
+                if (adj.getBlockData() instanceof Lightable l && l.isLit() && adj.getCookTime() == 0) {
+                    l.setLit(false); adj.setBlockData(l); adj.update(true, false);
                 }
-            } else {
-                // Si rien ne cuit, on éteint doucement la texture du four s'il était allumé électriquement
-                if (adjacentFurnace.getBlockData() instanceof Lightable lightable && lightable.isLit() && adjacentFurnace.getCookTime() == 0) {
-                    lightable.setLit(false);
-                    adjacentFurnace.setBlockData(lightable);
-                    adjacentFurnace.update(true, false);
-                }
+                continue;
             }
+            ItemStack result = inv.getResult();
+            if (result != null && result.getType() != Material.AIR && result.getAmount() >= result.getMaxStackSize()) continue;
+            if (!consumeEnergy(graph, Math.round(energyPerTick))) continue;
+            consumed += energyPerTick;
+            if (adj.getBurnTime() < 2) adj.setBurnTime((short) 40);
+            if (adj.getBlockData() instanceof Lightable l && !l.isLit()) { l.setLit(true); adj.setBlockData(l); }
+            adj.setCookTime((short) Math.min(adj.getCookTime() + 5, adj.getCookTimeTotal() - 1));
+            adj.update(true, false);
         }
         return consumed;
     }
 
-    private Furnace findAdjacentFurnace(Location electricFurnaceLoc) {
-        for (Location neighbor : neighbors(electricFurnaceLoc)) {
-            Block block = neighbor.getBlock();
-            if (block.getState() instanceof Furnace furnace) {
-                return furnace;
-            }
-        }
-        return null;
-    }
-
-    private ItemStack firstNonEmptySlot(Inventory inv) {
-        for (ItemStack item : inv.getContents()) {
+    private ItemStack firstNonEmpty(Inventory inv) {
+        for (ItemStack item : inv.getContents())
             if (item != null && item.getType() != Material.AIR) return item;
+        return null;
+    }
+
+    private Inventory findAdjacentInventory(Location loc) {
+        for (Location n : neighbors(loc)) {
+            Block b = n.getBlock();
+            if (b.getState() instanceof InventoryHolder h) return h.getInventory();
         }
         return null;
     }
 
-    private Inventory findAdjacentInventory(Location interfaceLoc) {
-        for (Location neighbor : neighbors(interfaceLoc)) {
-            Block block = neighbor.getBlock();
-            if (block.getState() instanceof InventoryHolder holder) {
-                return holder.getInventory();
-            }
+    private Furnace findAdjacentFurnace(Location loc) {
+        for (Location n : neighbors(loc)) {
+            Block b = n.getBlock();
+            if (b.getState() instanceof Furnace f) return f;
         }
         return null;
     }
 
     private void checkRegulators(EnergyGraph graph) {
         if (graph.getRegulators().isEmpty()) return;
-
-        int lowestThreshold = 100;
+        int lowest = 100;
         for (Location loc : graph.getRegulators()) {
             BlockRecord r = registry.get(keyFor(loc));
-            if (r != null) lowestThreshold = Math.min(lowestThreshold, r.threshold);
+            if (r != null) lowest = Math.min(lowest, r.threshold);
         }
-
-        boolean shouldPause = graph.getFillPercent() < lowestThreshold;
-        boolean wasPaused = graph.isInterfacesPaused();
+        boolean shouldPause = graph.getFillPercent() < lowest;
+        boolean wasPaused   = graph.isInterfacesPaused();
         graph.setInterfacesPaused(shouldPause);
-
         if (shouldPause && !wasPaused && graph.getOwnerId() != null) {
-            NexusNetwork network = plugin.getNexusManager().getOrCreateNetwork(graph.getOwnerId());
-            if (network.isNotificationsEnabled()) {
+            NexusNetwork net = plugin.getNexusManager().getOrCreateNetwork(graph.getOwnerId());
+            if (net.isNotificationsEnabled()) {
                 Player owner = Bukkit.getPlayer(graph.getOwnerId());
                 if (owner != null) {
                     String msg = plugin.getConfig().getString("messages.low-energy", "")
-                            .replace("{name}", network.getName() == null ? "" : network.getName())
+                            .replace("{name}", net.getName() == null ? "" : net.getName())
                             .replace("{percent}", String.valueOf(Math.round(graph.getFillPercent())));
                     owner.sendMessage(ChatColor.translateAlternateColorCodes('&', msg));
                 }
             }
         }
     }
+
+    // ─── Utilitaires GUI ──────────────────────────────────────────────────
 
     public EnergyGraph getGraphContaining(Location loc) {
         for (EnergyGraph graph : graphs.values()) {
@@ -463,37 +423,28 @@ public class EnergyManager {
                     || graph.getSources().contains(loc)
                     || graph.getStorages().contains(loc)
                     || graph.getInterfaces().contains(loc)
-                    || graph.getRegulators().contains(loc)) {
-                return graph;
-            }
+                    || graph.getRegulators().contains(loc)) return graph;
         }
         return null;
     }
-
-    public int registrySize() {
-        return registry.size();
-    }
-
-    // ================= STATS AGREGEES (pour le GUI) =================
 
     public record EnergyStats(long capacity, long stored, double production, double consumption,
                                int cableCount, int machineCount, int networkCount) {}
 
     public EnergyStats getStatsForOwner(UUID owner) {
-        long capacity = 0, stored = 0;
-        double production = 0, consumption = 0;
-        int cables = 0, machines = 0, networks = 0;
-
-        for (EnergyGraph graph : graphs.values()) {
-            if (!owner.equals(graph.getOwnerId())) continue;
-            capacity += graph.getTotalCapacity();
-            stored += totalStoredOf(graph);
-            production += graph.getLastProduction();
-            consumption += graph.getLastConsumption();
-            cables += graph.getCables().size();
-            machines += graph.machineCount();
-            networks++;
+        long cap = 0, stored = 0;
+        double prod = 0, cons = 0;
+        int cables = 0, machines = 0, nets = 0;
+        for (EnergyGraph g : graphs.values()) {
+            if (!owner.equals(g.getOwnerId())) continue;
+            cap     += g.getTotalCapacity();
+            stored  += totalStoredOf(g);
+            prod    += g.getLastProduction();
+            cons    += g.getLastConsumption();
+            cables  += g.getCables().size();
+            machines += g.machineCount();
+            nets++;
         }
-        return new EnergyStats(capacity, stored, production, consumption, cables, machines, networks);
+        return new EnergyStats(cap, stored, prod, cons, cables, machines, nets);
     }
 }

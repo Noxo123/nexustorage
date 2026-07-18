@@ -63,10 +63,11 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
                     msg(sender, "&cCette sous-commande nécessite un joueur en jeu.");
                 }
             }
+            // Ligne 69 (dans le switch)
             case "reload" -> {
                 plugin.reloadConfig();
                 plugin.getEconomyManager().refresh();
-                plugin.getItemsAdderManager().refresh();
+                plugin.getItemsAdderManager().reload(); // Mis à jour de refresh() à reload()
                 msg(sender, plugin.getConfig().getString("messages.admin-reloaded"));
             }
             case "toggle"  -> handleToggle(sender, args);
@@ -107,7 +108,7 @@ public class NexusAdminCommand implements CommandExecutor, TabCompleter {
         if (feature.equals("vault")) {
             plugin.getEconomyManager().refresh();
         } else {
-            plugin.getItemsAdderManager().refresh();
+            plugin.getItemsAdderManager().reload(); // Mis à jour de refresh() à reload()
         }
 
         String label = feature.equals("vault") ? "Vault" : "ItemsAdder (en preparation)";

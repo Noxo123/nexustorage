@@ -9,13 +9,16 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-public class ShieldDomeManager implements Listener {
+public class ShieldDomeManagerImpl implements ShieldDomeManager, Listener {
+    // Reste du code inchangé...
 
     private final Main plugin;
     private final Map<Location, UUID> activeDomes = new HashMap<>();

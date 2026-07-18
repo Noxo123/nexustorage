@@ -58,7 +58,7 @@ public class Main extends JavaPlugin {
     private ChestLinkManager chestLinkManager;
     private CompanyManager companyManager;
     private EnergyMarketManager energyMarketManager;
-    private ShieldDomeManager shieldDomeManager; // Ajout du manager de dôme
+    private ShieldDomeManager shieldDomeManager; // Reste inchangé
 
     private NamespacedKey nexusCoreKey;
     private NamespacedKey nexusTabletKey;
@@ -91,9 +91,8 @@ public class Main extends JavaPlugin {
         this.companyManager      = new CompanyManager(this);
         this.energyMarketManager = new EnergyMarketManager(this);
         
-        // Initialisation de l'implémentation du dôme
-        ShieldDomeManagerImpl domeImpl = new ShieldDomeManagerImpl(this);
-        this.shieldDomeManager   = domeImpl;
+        // CORRECTION : Initialisation directe via la classe ShieldDomeManager
+        this.shieldDomeManager   = new ShieldDomeManager(this);
 
         // Enregistrement des Listeners natifs
         getServer().getPluginManager().registerEvents(new NexusCoreListener(this),           this);
@@ -103,7 +102,7 @@ public class Main extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ChestLinkListener(this),           this);
         getServer().getPluginManager().registerEvents(new NexusBlockListener(this),          this);
         getServer().getPluginManager().registerEvents(new NexusConnectedBlockListener(this), this);
-        getServer().getPluginManager().registerEvents(domeImpl,                              this); // Enregistrement des événements du dôme
+        getServer().getPluginManager().registerEvents(this.shieldDomeManager,                this); // CORRECTION : Enregistrement direct du manager
 
         // Enregistrement sécurisé des commandes via réflexion
         NexusCommand nexusCmd = new NexusCommand(this);
@@ -236,17 +235,17 @@ public class Main extends JavaPlugin {
 
     // Getters globaux
     public NexusManager        getNexusManager()        { return nexusManager; }
-    public NexusAccessManager   getAccessManager()       { return accessManager; }
-    public NexusStorageManager  getStorageManager()      { return storageManager; }
-    public NexusUpgradeManager  getUpgradeManager()      { return upgradeManager; }
-    public EconomyManager       getEconomyManager()      { return economyManager; }
-    public ItemsAdderManager    getItemsAdderManager()   { return itemsAdderManager; }
-    public NexusGUIManager       getGuiManager()          { return guiManager; }
-    public EnergyManager        getEnergyManager()       { return energyManager; }
-    public ChestLinkManager     getChestLinkManager()    { return chestLinkManager; }
-    public CompanyManager       getCompanyManager()      { return companyManager; }
-    public EnergyMarketManager  getEnergyMarketManager() { return energyMarketManager; }
-    public ShieldDomeManager    getShieldDomeManager()   { return shieldDomeManager; } // Getter pour le Dôme
+    public NexusAccessManager  getAccessManager()       { return accessManager; }
+    public NexusStorageManager getStorageManager()      { return storageManager; }
+    public NexusUpgradeManager getUpgradeManager()      { return upgradeManager; }
+    public EconomyManager      getEconomyManager()      { return economyManager; }
+    public ItemsAdderManager   getItemsAdderManager()   { return itemsAdderManager; }
+    public NexusGUIManager     getGuiManager()          { return guiManager; }
+    public EnergyManager       getEnergyManager()       { return energyManager; }
+    public ChestLinkManager    getChestLinkManager()    { return chestLinkManager; }
+    public CompanyManager      getCompanyManager()      { return companyManager; }
+    public EnergyMarketManager getEnergyMarketManager() { return energyMarketManager; }
+    public ShieldDomeManager   getShieldDomeManager()   { return shieldDomeManager; } 
 
     public NamespacedKey getNexusCoreKey()           { return nexusCoreKey; }
     public NamespacedKey getNexusTabletKey()         { return nexusTabletKey; }

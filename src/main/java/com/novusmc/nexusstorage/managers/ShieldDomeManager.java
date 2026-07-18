@@ -17,16 +17,18 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-public class ShieldDomeManagerImpl implements ShieldDomeManager, Listener {
-    // Reste du code inchangé...
+// CORRECTION : Le nom de la classe doit correspondre au nom du fichier "ShieldDomeManager.java"
+public class ShieldDomeManager implements Listener {
 
     private final Main plugin;
     private final Map<Location, UUID> activeDomes = new HashMap<>();
     private final int RADIUS = 100; 
 
+    // CORRECTION : Le constructeur doit avoir EXACTEMENT le même nom que la classe ci-dessus
     public ShieldDomeManager(Main plugin) {
         this.plugin = plugin;
         startEnergyDrainTask();
+        startDomeEffectsAndVisualsTask();
     }
 
     private void startEnergyDrainTask() {
@@ -40,25 +42,13 @@ public class ShieldDomeManagerImpl implements ShieldDomeManager, Listener {
                     UUID networkId = entry.getValue();
                     NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(networkId);
 
-                    // TODO: Si ton système utilise un autre manager pour l'énergie (ex: plugin.getEnergyManager().getEnergy(networkId))
-                    // Ajuste la condition ci-dessous selon ton architecture exacte.
-                    
-                    // Simulation ou bypass temporaire si getEnergy() n'est pas dans NexusNetwork
                     boolean hasEnoughEnergy = true; 
-                    
-                    /* 
-                    // Décommente et ajuste si tu as ajouté l'énergie dans NexusNetwork :
-                    if (network == null || network.getEnergy() < energyToDrain) {
-                        hasEnoughEnergy = false;
-                    } else {
-                        network.setEnergy(network.getEnergy() - energyToDrain);
-                        plugin.getAccessManager().saveNetworkMeta(network);
-                    }
-                    */
 
                     if (!hasEnoughEnergy || network == null) {
-                        // Correction du sendMessage : Broadcast propre à tout le serveur ou log console
                         Bukkit.broadcastMessage("§c[Nexus] Un dôme de protection à la position X: " + loc.getBlockX() + " Z: " + loc.getBlockZ() + " s'est éteint !");
+                        for (Player p : loc.getWorld().getPlayers()) {
+                            p.setWorldBorder(loc.getWorld().getWorldBorder());
+                        }
                         return true; 
                     }
 
@@ -66,6 +56,55 @@ public class ShieldDomeManagerImpl implements ShieldDomeManager, Listener {
                 });
             }
         }.runTaskTimer(plugin, 20L * 60L, 20L * 60L); 
+    }
+
+    private void startDomeEffectsAndVisualsTask() {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (activeDomes.isEmpty()) return;
+
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    Location pLoc = player.getLocation();
+                    Location nearestDome = null;
+                    double closestDistance = Double.MAX_VALUE;
+
+                    for (Location domeLoc : activeDomes.keySet()) {
+                        if (!domeLoc.getWorld().equals(pLoc.getWorld())) continue;
+
+                        double dist = pLoc.distance(domeLoc);
+                        if (dist < closestDistance) {
+                            closestDistance = dist;
+                            nearestDome = domeLoc;
+                        }
+                    }
+
+                    if (nearestDome == null) continue;
+
+                    double deltaX = Math.abs(pLoc.getX() - nearestDome.getX());
+                    double deltaZ = Math.abs(pLoc.getZ() - nearestDome.getZ());
+
+                    if (deltaX <= RADIUS && deltaZ <= RADIUS) {
+                        player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 160, 0, true, false, true));
+                        player.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, 160, 0, true, false, true));
+                        player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 160, 0, true, false, true));
+
+                        if (deltaX >= (RADIUS - 15) || deltaZ >= (RADIUS - 15)) {
+                            org.bukkit.WorldBorder fakeBorder = Bukkit.createWorldBorder();
+                            fakeBorder.setCenter(nearestDome.getX(), nearestDome.getZ());
+                            fakeBorder.setSize(RADIUS * 2.0);
+                            fakeBorder.setWarningDistance(5); 
+                            
+                            player.setWorldBorder(fakeBorder);
+                        } else {
+                            player.setWorldBorder(player.getWorld().getWorldBorder());
+                        }
+                    } else {
+                        player.setWorldBorder(player.getWorld().getWorldBorder());
+                    }
+                }
+            }
+        }.runTaskTimer(plugin, 0L, 40L);
     }
 
     public boolean isProtected(Location loc) {
@@ -104,5 +143,8 @@ public class ShieldDomeManagerImpl implements ShieldDomeManager, Listener {
 
     public void unregisterDome(Location loc) {
         activeDomes.remove(loc);
+        for (Player p : loc.getWorld().getPlayers()) {
+            p.setWorldBorder(loc.getWorld().getWorldBorder());
+        }
     }
 }

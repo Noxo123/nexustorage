@@ -23,7 +23,6 @@ import com.novusmc.nexusstorage.managers.NexusManager;
 import com.novusmc.nexusstorage.managers.NexusStorageManager;
 import com.novusmc.nexusstorage.managers.NexusUpgradeManager;
 import com.novusmc.nexusstorage.managers.ShieldDomeManager;
-import com.novusmc.nexusstorage.managers.ShieldDomeManagerImpl;
 import com.novusmc.nexusstorage.model.EnergyBlockType;
 import com.novusmc.nexusstorage.util.ConfigManager;
 import net.md_5.bungee.api.ChatColor;

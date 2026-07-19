@@ -183,12 +183,21 @@ public class Main extends JavaPlugin {
     }
 
     public ItemStack buildEnergyItem(EnergyBlockType type) {
-        ItemStack item = new ItemStack(type.getMaterial());
+        // Tente d'abord de résoudre via ItemsAdder (clé = type.configKey())
+        // puis retombe sur le Material vanilla de EnergyBlockType si absent
+        ItemStack item = itemsAdderManager.isEnabled()
+                ? itemsAdderManager.resolve(type.configKey())
+                : new ItemStack(type.getMaterial());
+        if (item == null || item.getType() == org.bukkit.Material.AIR)
+            item = new ItemStack(type.getMaterial());
+
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(ChatColor.translateAlternateColorCodes('&', type.getDisplayName()));
             if (type.getLore().length > 0)
-                meta.setLore(List.of(type.getLore()).stream().map(l -> ChatColor.translateAlternateColorCodes('&', l)).toList());
+                meta.setLore(List.of(type.getLore()).stream()
+                        .map(l -> ChatColor.translateAlternateColorCodes('&', l)).toList());
+            // PDC indispensable : identifie le bloc comme bloc d'énergie Nexus à la pose
             meta.getPersistentDataContainer().set(energyTypeKey, PersistentDataType.STRING, type.name());
             item.setItemMeta(meta);
         }

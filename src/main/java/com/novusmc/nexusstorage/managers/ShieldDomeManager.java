@@ -61,6 +61,14 @@ public class ShieldDomeManager implements Listener {
         );
     }
 
+    /**
+     * Alias de activate() — maintenu pour compatibilite avec EnergyBlockType.handleShieldActivation().
+     * Preferer activate(core, network) dans le nouveau code.
+     */
+    public void registerDome(UUID network, Location core) {
+        activate(core, network);
+    }
+
     public void deactivate(Location loc) {
         domes.remove(loc);
 
@@ -189,7 +197,7 @@ public class ShieldDomeManager implements Listener {
     @EventHandler
     public void onBreak(BlockBreakEvent e) {
         if (isProtected(e.getBlock().getLocation())
-                && !e.getPlayer().hasPermission("nexusstorage.dome.bypass")) {
+                && !e.getPlayer().hasPermission("nexusstorage.bypass.dome")) {
 
             e.setCancelled(true);
             e.getPlayer().sendMessage(Component.text("Bouclier Nexus actif.", NamedTextColor.RED));

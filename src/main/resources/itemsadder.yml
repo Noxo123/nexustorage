@@ -49,11 +49,11 @@ nexus-chest-link:
 
 energy-solar-panel-basic:
   itemsadder: "default"
-  fallback: "SEA_LANTERN"
+  fallback: "DAYLIGHT_DETECTOR"
 
 energy-solar-panel-advanced:
   itemsadder: "default"
-  fallback: "END_ROD"
+  fallback: "TINTED_GLASS"
 
 energy-capacitor-basic:
   itemsadder: "default"
@@ -61,7 +61,7 @@ energy-capacitor-basic:
 
 energy-capacitor-advanced:
   itemsadder: "default"
-  fallback: "NETHERITE_BLOCK"
+  fallback: "REINFORCED_DEEPSLATE"
 
 energy-cable-basic:
   itemsadder: "default"
@@ -71,21 +71,21 @@ energy-cable-insulated:
   itemsadder: "default"
   fallback: "CHAIN"
 
-energy-interface:
+energy-interface-block:
   itemsadder: "default"
-  fallback: "HOPPER"
+  fallback: "CHISELED_COPPER"
 
-energy-core:
+energy-energy-core:
   itemsadder: "default"
   fallback: "BEACON"
 
-energy-regulator:
+energy-redstone-regulator:
+  itemsadder: "default"
+  fallback: "COMPARATOR"
+
+energy-energy-monitor:
   itemsadder: "default"
   fallback: "OBSERVER"
-
-energy-monitor:
-  itemsadder: "default"
-  fallback: "LECTERN"
 
 # ── Blocs d'accès au stockage ─────────────────────────────────────────────
 
@@ -137,12 +137,12 @@ gui-filler:
 
 energy-electric-furnace:
   itemsadder: "default"
-  fallback: "FURNACE"
+  fallback: "BLAST_FURNACE"
 
 
 energy-shield-dome:
   itemsadder: "default"
-  fallback: "CRYING_OBSIDIAN"
+  fallback: "SEA_LANTERN"
 
 
 # Alias utilisé dans NexusAdminCommand.handleGive pour 'chestlink'

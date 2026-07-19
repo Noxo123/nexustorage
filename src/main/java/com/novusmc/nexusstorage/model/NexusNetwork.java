@@ -85,4 +85,12 @@ public class NexusNetwork {
     public void removeCore(String key) {
         corePositions.remove(key);
     }
+
+    /**
+     * Alias de getMembers() pour compatibilite.
+     */
+    public java.util.Map<UUID, AccessLevel> getAccessMap() {
+        return members;
+    }
+
 }

@@ -1,118 +1,147 @@
 package com.novusmc.nexusstorage.model;
 
-import com.novusmc.nexusstorage.Main;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.entity.Player;
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
 
+/**
+ * Tous les blocs du système d'énergie Nexus (style RF/FE).
+ *
+ * IMPORTANT: les rôles (Role) sont exactement ceux attendus par EnergyManager :
+ *   CORE, SOURCE, STORAGE, CABLE, INTERFACE, FURNACE, SHIELD, REGULATOR, MONITOR
+ *
+ * Chaque bloc a un matériau distinct pour être identifiable en jeu
+ * (détecté via PDC nexus_energy_type, pas le Material seul).
+ * maxStorage = capacité de stockage propre au bloc (0 si inapplicable).
+ */
 public enum EnergyBlockType {
 
-    // --- Générateurs ---
-    SOLAR_PANEL_BASIC(Material.DAYLIGHT_DETECTOR, 10000, "Panneau Solaire Basique", "Génère de l'énergie en journée.", BlockRole.GENERATOR),
-    SOLAR_PANEL_ADVANCED(Material.DAYLIGHT_DETECTOR, 50000, "Panneau Solaire Avancé", "Génère beaucoup plus d'énergie.", BlockRole.GENERATOR),
+    // ── Générateurs (SOURCE) ────────────────────────────────────────────
+    SOLAR_PANEL_BASIC(
+            Material.DAYLIGHT_DETECTOR, Role.SOURCE, 0,
+            "&e&lPanneau Solaire Basique",
+            "&7Génère &e20 FE&7/cycle en journée.",
+            "&7Nécessite le ciel dégagé au-dessus."
+    ),
+    SOLAR_PANEL_ADVANCED(
+            Material.TINTED_GLASS, Role.SOURCE, 0,
+            "&6&lPanneau Solaire Avancé",
+            "&7Génère &e60 FE&7/cycle en journée.",
+            "&7Nécessite Y ≥ 100 et ciel dégagé."
+    ),
 
-    // --- Stockage / Capacités ---
-    CAPACITOR_BASIC(Material.COPPER_BLOCK, 100000, "Condensateur Basique", "Stocke de l'énergie Nexus.", BlockRole.STORAGE),
-    CAPACITOR_ADVANCED(Material.REINFORCED_DEEPSLATE, 1000000, "Condensateur Avancé", "Grande capacité de stockage.", BlockRole.STORAGE),
-    ENERGY_CORE(Material.BEACON, 10000000, "Cœur Énergétique Nexus", "Le centre névralgique de votre stockage.", BlockRole.STORAGE),
+    // ── Stockage (STORAGE) ───────────────────────────────────────────────
+    CAPACITOR_BASIC(
+            Material.COPPER_BLOCK, Role.STORAGE, 10_000L,
+            "&b&lCondensateur Basique",
+            "&7Stocke jusqu'à &e10 000 FE."
+    ),
+    CAPACITOR_ADVANCED(
+            Material.REINFORCED_DEEPSLATE, Role.STORAGE, 100_000L,
+            "&5&lCondensateur Avancé",
+            "&7Stocke jusqu'à &e100 000 FE."
+    ),
 
-    // --- Câbles ---
-    CABLE_BASIC(Material.LIGHT_GRAY_CONCRETE, 0, "Câble Énergétique Basique", "Transporte l'énergie du réseau.", BlockRole.CABLE),
-    CABLE_INSULATED(Material.GRAY_CONCRETE, 0, "Câble Isolé", "Transporte l'énergie sans déperdition.", BlockRole.CABLE),
+    // ── Nœud central (CORE) ─────────────────────────────────────────────
+    ENERGY_CORE(
+            Material.BEACON, Role.CORE, 0,
+            "&d&l⚡ Nexus Energy Core",
+            "&7Ancre le réseau physique de câbles",
+            "&7à ton réseau Nexus.",
+            "&7Un seul suffit par grappe."
+    ),
 
-    // --- Machines / Consommateurs / Utilitaires ---
-    INTERFACE_BLOCK(Material.CHISELED_COPPER, 5000, "Interface Réseau", "Permet d'interagir avec le stockage.", BlockRole.CONSUMER),
-    ELECTRIC_FURNACE(Material.BLAST_FURNACE, 20000, "Four Électrique", "Cuit les éléments en utilisant les FE du réseau.", BlockRole.CONSUMER),
-    REDSTONE_REGULATOR(Material.COMPARATOR, 0, "Régulateur Redstone", "Émet un signal selon l'énergie disponible.", BlockRole.UTILITY),
-    ENERGY_MONITOR(Material.OBSERVER, 0, "Moniteur Énergétique", "Affiche les stats du réseau.", BlockRole.UTILITY),
-    
-    // --- Système de Bouclier ---
-    SHIELD_DOME(Material.SEA_LANTERN, 50000, "Générateur de Bouclier", "Protège une zone de 200x200 contre les intrus.", BlockRole.CONSUMER);
+    // ── Câbles (CABLE) ───────────────────────────────────────────────────
+    CABLE_BASIC(
+            Material.LIGHT_GRAY_CONCRETE, Role.CABLE, 0,
+            "&f&lCâble Énergétique Basique",
+            "&7Transporte l'énergie.",
+            "&7Légère perte par bloc."
+    ),
+    CABLE_INSULATED(
+            Material.GRAY_CONCRETE, Role.CABLE, 0,
+            "&f&lCâble Isolé",
+            "&7Transporte l'énergie sans déperdition."
+    ),
+
+    // ── Interface items (INTERFACE) ──────────────────────────────────────
+    INTERFACE_BLOCK(
+            Material.CHISELED_COPPER, Role.INTERFACE, 0,
+            "&a&lInterface Réseau",
+            "&7Transfère les items d'un coffre adjacent",
+            "&7vers ton stockage Nexus.",
+            "&7Consomme &e5 FE&7/item."
+    ),
+
+    // ── Four électrique (FURNACE) ─────────────────────────────────────
+    ELECTRIC_FURNACE(
+            Material.BLAST_FURNACE, Role.FURNACE, 0,
+            "&6&l⚡ Four Électrique",
+            "&7Accélère la cuisson en utilisant",
+            "&7l'énergie du réseau.",
+            "&7Consomme &e75 FE&7/tick."
+    ),
+
+    // ── Régulateur (REGULATOR) ───────────────────────────────────────────
+    REDSTONE_REGULATOR(
+            Material.COMPARATOR, Role.REGULATOR, 0,
+            "&c&lRégulateur Redstone",
+            "&7Coupe les Interfaces si l'énergie",
+            "&7tombe sous le seuil configuré.",
+            "&7Clic : +5% | Shift+Clic : -5%"
+    ),
+
+    // ── Moniteur (MONITOR) ───────────────────────────────────────────────
+    ENERGY_MONITOR(
+            Material.OBSERVER, Role.MONITOR, 0,
+            "&f&lMoniteur Énergétique",
+            "&7Clic droit pour voir les statistiques",
+            "&7en temps réel du réseau."
+    ),
+
+    // ── Dôme de protection (SHIELD) ──────────────────────────────────────
+    SHIELD_DOME(
+            Material.SEA_LANTERN, Role.SHIELD, 0,
+            "&5&l⚡ Générateur de Bouclier",
+            "&7Protège une zone de 200×200 blocs.",
+            "&7Consomme &e250 FE&7/10s."
+    );
+
+    /**
+     * Rôles alignés sur la logique du BFS de EnergyManager.
+     * Ne pas changer les noms sans mettre à jour EnergyManager en parallèle.
+     */
+    public enum Role {
+        SOURCE,    // génère de l'énergie
+        STORAGE,   // stocke de l'énergie
+        CORE,      // nœud d'ancrage (obligatoire, 1 par réseau)
+        CABLE,     // transporte l'énergie
+        INTERFACE, // transfère des items → stockage Nexus
+        FURNACE,   // four alimenté électriquement
+        REGULATOR, // coupe les interfaces si énergie faible
+        MONITOR,   // affiche les stats
+        SHIELD     // dôme de protection
+    }
 
     private final Material material;
-    private final long maxStorage;
-    private final String displayName;
-    private final List<String> lore;
-    private final BlockRole role;
+    private final Role     role;
+    private final long     maxStorage;
+    private final String   displayName;
+    private final String[] lore;
 
-    EnergyBlockType(Material material, long maxStorage, String displayName, String description, BlockRole role) {
-        this.material = material;
-        this.maxStorage = maxStorage;
+    EnergyBlockType(Material material, Role role, long maxStorage,
+                    String displayName, String... lore) {
+        this.material    = material;
+        this.role        = role;
+        this.maxStorage  = maxStorage;
         this.displayName = displayName;
-        this.lore = Arrays.asList("§7" + description, "§8Capacité max: §a" + maxStorage + " FE");
-        this.role = role;
+        this.lore        = lore;
     }
 
-    public Material getMaterial() {
-        return material;
-    }
+    public Material getMaterial()  { return material; }
+    public Role     getRole()      { return role; }
+    public long     getMaxStorage(){ return maxStorage; }
+    public String   getDisplayName(){ return displayName; }
+    public String[] getLore()      { return lore; }
 
-    public long getMaxStorage() {
-        return maxStorage;
-    }
-
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public List<String> getLore() {
-        return lore;
-    }
-
-    public BlockRole getRole() {
-        return role;
-    }
-
-    /**
-     * Vérifie et affiche l'énergie disponible sur le réseau.
-     * Correction de getEnergy() selon ton modèle exact (ex: via le stockage interne).
-     */
-    public void checkNetworkEnergy(NexusNetwork network, Player player) {
-        // Si ton NexusNetwork stocke la valeur dans une variable, on l'utilise directement ici
-        long currentEnergy = network.getStoredEnergy(); 
-
-        player.sendMessage(
-                Component.text("⚡ Énergie du réseau Nexus : ", NamedTextColor.AQUA)
-                        .append(Component.text(currentEnergy + " / " + network.getMaxEnergy() + " FE", NamedTextColor.GREEN))
-        );
-    }
-
-    /**
-     * Vérification de la sécurité / accès des joueurs.
-     * Utilise network.getAccessMap() ou getMembers() pour corriger l'erreur de la Map.
-     */
-    public boolean hasAccess(NexusNetwork network, UUID playerUUID) {
-        // Si ton réseau utilise une map d'AccessLevel, on vérifie si le joueur y est présent
-        return network.getAccessMap() != null && network.getAccessMap().containsKey(playerUUID);
-    }
-
-    /**
-     * Logique d'activation du dôme de protection.
-     */
-    public void handleShieldActivation(Main plugin, Location loc, UUID networkOwner) {
-        if (this == SHIELD_DOME) {
-            // Ajustement de la signature : si ton ShieldDomeManager attend (owner, location) au lieu de (location, owner)
-            plugin.getShieldDomeManager().registerDome(networkOwner, loc);
-            
-            loc.getWorld().sendMessage(
-                    Component.text("⚡ Un dôme énergétique Nexus vient d'être déployé !", NamedTextColor.GREEN)
-            );
-        }
-    }
-
-    /**
-     * Enum interne pour définir les rôles des blocs de ton réseau énergétique.
-     */
-    public enum BlockRole {
-        GENERATOR,
-        STORAGE,
-        CABLE,
-        CONSUMER,
-        UTILITY
-    }
+    /** Clé utilisée dans itemsadder.yml (ex: "energy_solar_panel_basic"). */
+    public String configKey() { return "energy-" + name().toLowerCase().replace('_', '-'); }
 }

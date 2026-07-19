@@ -29,7 +29,8 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
             "core", "tablet", "chestlink", "upgrade",
             "solarpanel", "solarpanel2", "capacitor", "capacitor2",
             "cable", "cable2", "interface", "electricfurnace",
-            "energycore", "regulator", "monitor", "connectedblock"
+            "energycore", "regulator", "monitor", "connectedblock",
+            "shield_dome"
     );
 
     public NexusCommand(Main plugin) { 
@@ -130,6 +131,7 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
             case "energycore"      -> giveEnergy(player, EnergyBlockType.ENERGY_CORE);
             case "regulator"       -> giveEnergy(player, EnergyBlockType.REDSTONE_REGULATOR);
             case "monitor"         -> giveEnergy(player, EnergyBlockType.ENERGY_MONITOR);
+            case "shield_dome"     -> giveEnergy(player, EnergyBlockType.SHIELD_DOME);
             default -> msg(player, "&cItem inconnu. Utilise /nexus give <item>.");
         }
     }
@@ -168,7 +170,6 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
             options.add("upgrade");
             options.add("access");
             options.add("energy");
-            // N'affiche le sous-argument "give" que si le joueur a le droit de l'utiliser
             if (sender.hasPermission("nexusstorage.give") || sender.hasPermission("nexusstorage.admin")) {
                 options.add("give");
             }

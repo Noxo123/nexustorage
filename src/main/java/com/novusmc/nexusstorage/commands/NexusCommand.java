@@ -32,7 +32,9 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
             "energycore", "regulator", "monitor", "connectedblock"
     );
 
-    public NexusCommand(Main plugin) { this.plugin = plugin; }
+    public NexusCommand(Main plugin) { 
+        this.plugin = plugin; 
+    }
 
     private void msg(CommandSender s, String m) {
         s.sendMessage(ChatColor.translateAlternateColorCodes('&', m));
@@ -109,7 +111,11 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
             }
             case "upgrade" -> {
                 int tier = 1;
-                if (args.length >= 3) { try { tier = Math.max(1, Math.min(3, Integer.parseInt(args[2]))); } catch (NumberFormatException ignored) {} }
+                if (args.length >= 3) { 
+                    try { 
+                        tier = Math.max(1, Math.min(3, Integer.parseInt(args[2]))); 
+                    } catch (NumberFormatException ignored) {} 
+                }
                 player.getInventory().addItem(plugin.buildUpgradeCrystal(tier));
                 msg(player, "&aTu as recu un &dNexus Upgrade Crystal &7[Tier " + tier + "]&a.");
             }
@@ -157,12 +163,28 @@ public class NexusCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> options = new ArrayList<>();
-        if (args.length == 1)
-            options.addAll(List.of("give", "upgrade", "access", "energy"));
-        else if (args.length == 2 && args[0].equalsIgnoreCase("give"))
-            options.addAll(GIVE_ITEMS);
-        else if (args.length == 3 && args[0].equalsIgnoreCase("give") && args[1].equalsIgnoreCase("upgrade"))
-            options.addAll(List.of("1", "2", "3"));
-        return options.stream().filter(o -> o.toLowerCase().startsWith(args[args.length - 1].toLowerCase())).toList();
+        
+        if (args.length == 1) {
+            options.add("upgrade");
+            options.add("access");
+            options.add("energy");
+            // N'affiche le sous-argument "give" que si le joueur a le droit de l'utiliser
+            if (sender.hasPermission("nexusstorage.give") || sender.hasPermission("nexusstorage.admin")) {
+                options.add("give");
+            }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
+            if (sender.hasPermission("nexusstorage.give") || sender.hasPermission("nexusstorage.admin")) {
+                options.addAll(GIVE_ITEMS);
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("give") && args[1].equalsIgnoreCase("upgrade")) {
+            if (sender.hasPermission("nexusstorage.give") || sender.hasPermission("nexusstorage.admin")) {
+                options.addAll(List.of("1", "2", "3"));
+            }
+        }
+        
+        String lastArg = args[args.length - 1].toLowerCase();
+        return options.stream()
+                .filter(o -> o.toLowerCase().startsWith(lastArg))
+                .toList();
     }
 }

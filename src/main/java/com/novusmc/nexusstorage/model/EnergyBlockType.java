@@ -1,78 +1,114 @@
-package com.novusmc.nexusstorage.model;
+package com.novusmc.nexusstorage.manager;
 
-import org.bukkit.Material;
+import com.novusmc.nexusstorage.Main;
+import com.novusmc.nexusstorage.model.NexusNetwork;
+import org.bukkit.Location;
+import org.bukkit.block.Block;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 
-/**
- * Tous les blocs du systeme d'energie Nexus.
- * ELECTRIC_FURNACE et SHIELD_DOME ont leur propre role (FURNACE, SHIELD)
- * pour ne pas etre confondus avec les INTERFACE_BLOCK dans les boucles.
- */
-public enum EnergyBlockType {
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
-    SOLAR_PANEL_BASIC(Material.SEA_LANTERN, Role.SOURCE, "&e&lNexus Solar Panel",
-            "&7Genere de l'energie le jour", "&7si le ciel est visible au-dessus."),
+public class ShieldDomeManager implements Listener {
 
-    SOLAR_PANEL_ADVANCED(Material.END_ROD, Role.SOURCE, "&6&lNexus Solar Panel II",
-            "&7Version avancee : plus de sortie,", "&7necessite Y > 100 et ciel degage."),
+    private final Main plugin;
+    // Garde en mémoire l'emplacement de chaque générateur actif et le réseau auquel il appartient
+    private final Map<Location, UUID> activeDomes = new HashMap<>();
 
-    CAPACITOR_BASIC(Material.COPPER_BLOCK, Role.STORAGE, "&b&lNexus Capacitor",
-            "&7Stocke l'energie du reseau physique.", "&7Capacite de base."),
-
-    CAPACITOR_ADVANCED(Material.NETHERITE_BLOCK, Role.STORAGE, "&5&lNexus Capacitor II",
-            "&7Capacitor haute capacite."),
-
-    CABLE_BASIC(Material.IRON_BARS, Role.CABLE, "&f&lNexus Energy Cable",
-            "&7Transporte l'energie.", "&7Legere perte par bloc."),
-
-    CABLE_INSULATED(Material.CHAIN, Role.CABLE, "&f&lNexus Insulated Cable",
-            "&7Cable isole : perte quasi nulle,", "&7meilleur debit."),
-
-    INTERFACE_BLOCK(Material.HOPPER, Role.INTERFACE, "&a&lNexus Interface",
-            "&7Consomme de l'energie pour transferer",
-            "&7des items d'un coffre adjacent vers ton stockage Nexus."),
-
-    // Role distinct FURNACE : detecte separement dans EnergyManager.runElectricFurnaces()
-    ELECTRIC_FURNACE(Material.FURNACE, Role.FURNACE, "&6&l⚡ Electric Furnace",
-            "&7Consomme de l'energie du reseau",
-            "&7pour cuire des aliments ou fondre des minerais",
-            "&7a tres grande vitesse."),
-
-    ENERGY_CORE(Material.BEACON, Role.CORE, "&d&l⚡ Nexus Energy Core",
-            "&7Ancre le reseau physique de cables",
-            "&7a ton reseau Nexus. Un seul suffit", "&7par grappe de cables."),
-
-    REDSTONE_REGULATOR(Material.OBSERVER, Role.REGULATOR, "&c&lNexus Regulator",
-            "&7Coupe automatiquement les Interfaces",
-            "&7si l'energie stockee passe sous un seuil.",
-            "&7Clique pour augmenter le seuil,", "&7shift-clique pour le baisser."),
-
-    ENERGY_MONITOR(Material.LECTERN, Role.MONITOR, "&f&lNexus Energy Monitor",
-            "&7Clique droit pour voir les statistiques",
-            "&7en temps reel du reseau d'energie."),
-
-    // Role distinct SHIELD : detecte separement dans ShieldDomeManager
-    SHIELD_DOME(Material.CRYING_OBSIDIAN, Role.SHIELD, "&5&l⚡ Shield Generator",
-            "&7Generateur de dome energetique.",
-            "&7Consomme 10000 FE/heure pour proteger",
-            "&7une zone de 200x200 blocs.");
-
-    public enum Role { SOURCE, STORAGE, CABLE, INTERFACE, FURNACE, SHIELD, CORE, REGULATOR, MONITOR }
-
-    private final Material material;
-    private final Role role;
-    private final String displayName;
-    private final String[] lore;
-
-    EnergyBlockType(Material material, Role role, String displayName, String... lore) {
-        this.material = material;
-        this.role = role;
-        this.displayName = displayName;
-        this.lore = lore;
+    public ShieldDomeManager(Main plugin) {
+        this.plugin = plugin;
     }
 
-    public Material getMaterial()   { return material; }
-    public Role getRole()           { return role; }
-    public String getDisplayName()  { return displayName; }
-    public String[] getLore()       { return lore; }
-    public String configKey()       { return name().toLowerCase(); }
+    /**
+     * Tâche planifiée (appelée par exemple toutes les minutes ou toutes les heures)
+     * pour consommer l'énergie du réseau et désactiver le dôme s'il n'y a plus de FE.
+     */
+    public void runShieldTick() {
+        // La description indique 10 000 FE / heure. 
+        // Si ta tâche tourne toutes les minutes (1200 ticks), la consommation est de ~166 FE par minute.
+        double energyCostPerMinute = 10000.0 / 60.0; 
+
+        activeDomes.entrySet().removeIf(entry -> {
+            Location loc = entry.getKey();
+            UUID ownerUUID = entry.getValue();
+            
+            NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(ownerUUID);
+            
+            // Vérification si le réseau existe et a assez d'énergie
+            if (network == null || network.getEnergy() < energyCostPerMinute) {
+                // Plus assez d'énergie ou réseau supprimé -> on éteint le dôme
+                loc.getWorld().sendMessage("§c⚡ Un générateur de bouclier s'est éteint par manque d'énergie !");
+                return true; // Supprime du dôme actif
+            }
+
+            // Consomme l'énergie
+            network.setEnergy(network.getEnergy() - energyCostPerMinute);
+            return false;
+        });
+    }
+
+    /**
+     * Gère la protection de la zone (200x200 blocs autour du générateur).
+     */
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        if (isProtected(event.getBlock().getLocation(), event.getPlayer())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage("§c⚡ Cette zone est protégée par un bouclier énergétique Nexus !");
+        }
+    }
+
+    @EventHandler
+    public void onBlockPlace(BlockPlaceEvent event) {
+        if (isProtected(event.getBlock().getLocation(), event.getPlayer())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage("§c⚡ Cette zone est protégée par un bouclier énergétique Nexus !");
+        }
+    }
+
+    /**
+     * Vérifie si une position est protégée par un dôme actif
+     * et si le joueur qui interagit en est le propriétaire (ou a accès).
+     */
+    private boolean isProtected(Location blockLoc, Player player) {
+        for (Map.Entry<Location, UUID> entry : activeDomes.entrySet()) {
+            Location domeLoc = entry.getKey();
+            UUID ownerUUID = entry.getValue();
+
+            // Même monde et rayon de 100 blocs autour (pour faire une zone de 200x200)
+            if (blockLoc.getWorld().equals(domeLoc.getWorld())) {
+                double distanceX = Math.abs(blockLoc.getX() - domeLoc.getX());
+                double distanceZ = Math.abs(blockLoc.getZ() - domeLoc.getZ());
+
+                if (distanceX <= 100 && distanceZ <= 100) {
+                    // Si le joueur est le propriétaire, il a le droit de construire/casser
+                    if (player.getUniqueId().equals(ownerUUID)) {
+                        return false;
+                    }
+                    
+                    // Optionnel : Permettre aux membres du Nexus d'y accéder aussi
+                    NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(ownerUUID);
+                    if (network != null && network.getMembers().contains(player.getUniqueId())) {
+                        return false;
+                    }
+
+                    return true; // Zone protégée pour les autres !
+                }
+            }
+        }
+        return false;
+    }
+
+    public void registerDome(Location loc, UUID owner) {
+        activeDomes.put(loc, owner);
+    }
+
+    public void unregisterDome(Location loc) {
+        activeDomes.remove(loc);
+    }
 }

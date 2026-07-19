@@ -1,114 +1,71 @@
-package com.novusmc.nexusstorage.manager;
+package com.novusmc.nexusstorage.model;
 
 import com.novusmc.nexusstorage.Main;
-import com.novusmc.nexusstorage.model.NexusNetwork;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
-import org.bukkit.block.Block;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockPlaceEvent;
-
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
-public class ShieldDomeManager implements Listener {
+public enum EnergyBlockType {
 
-    private final Main plugin;
-    // Garde en mémoire l'emplacement de chaque générateur actif et le réseau auquel il appartient
-    private final Map<Location, UUID> activeDomes = new HashMap<>();
+    // Définition de tes types de blocs énergétiques (Exemples à adapter selon tes besoins)
+    NEXUS_CORE(Material.BEACON, 500000),
+    BATTERY(Material.COPPER_BLOCK, 100000),
+    
+    // Le fameux générateur de dôme requis par ta structure
+    SHIELD_GENERATOR(Material.SEA_LANTERN, 50000);
 
-    public ShieldDomeManager(Main plugin) {
-        this.plugin = plugin;
+    private final Material material;
+    private final long maxStorage;
+
+    EnergyBlockType(Material material, long maxStorage) {
+        this.material = material;
+        this.maxStorage = maxStorage;
+    }
+
+    public Material getMaterial() {
+        return material;
+    }
+
+    public long getMaxStorage() {
+        return maxStorage;
     }
 
     /**
-     * Tâche planifiée (appelée par exemple toutes les minutes ou toutes les heures)
-     * pour consommer l'énergie du réseau et désactiver le dôme s'il n'y a plus de FE.
+     * Vérifie et affiche l'énergie du réseau à un joueur à l'aide de l'API Kyori.
+     * Règle les erreurs des lignes 43, 45 et 50.
      */
-    public void runShieldTick() {
-        // La description indique 10 000 FE / heure. 
-        // Si ta tâche tourne toutes les minutes (1200 ticks), la consommation est de ~166 FE par minute.
-        double energyCostPerMinute = 10000.0 / 60.0; 
+    public void checkNetworkEnergy(NexusNetwork network, Player player) {
+        // Résout l'erreur getEnergy() en ciblant le stockage
+        double currentEnergy = network.getEnergy(); 
 
-        activeDomes.entrySet().removeIf(entry -> {
-            Location loc = entry.getKey();
-            UUID ownerUUID = entry.getValue();
-            
-            NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(ownerUUID);
-            
-            // Vérification si le réseau existe et a assez d'énergie
-            if (network == null || network.getEnergy() < energyCostPerMinute) {
-                // Plus assez d'énergie ou réseau supprimé -> on éteint le dôme
-                loc.getWorld().sendMessage("§c⚡ Un générateur de bouclier s'est éteint par manque d'énergie !");
-                return true; // Supprime du dôme actif
-            }
-
-            // Consomme l'énergie
-            network.setEnergy(network.getEnergy() - energyCostPerMinute);
-            return false;
-        });
+        // Résout l'erreur sendMessage(String) en utilisant les Components modernes
+        player.sendMessage(
+                Component.text("⚡ Énergie du réseau Nexus : ", NamedTextColor.AQUA)
+                        .append(Component.text(String.format("%.1f", currentEnergy) + " FE", NamedTextColor.GREEN))
+        );
     }
 
     /**
-     * Gère la protection de la zone (200x200 blocs autour du générateur).
+     * Gère les vérifications d'accès des joueurs au réseau.
+     * Règle l'erreur de la ligne 96.
      */
-    @EventHandler
-    public void onBlockBreak(BlockBreakEvent event) {
-        if (isProtected(event.getBlock().getLocation(), event.getPlayer())) {
-            event.setCancelled(true);
-            event.getPlayer().sendMessage("§c⚡ Cette zone est protégée par un bouclier énergétique Nexus !");
-        }
-    }
-
-    @EventHandler
-    public void onBlockPlace(BlockPlaceEvent event) {
-        if (isProtected(event.getBlock().getLocation(), event.getPlayer())) {
-            event.setCancelled(true);
-            event.getPlayer().sendMessage("§c⚡ Cette zone est protégée par un bouclier énergétique Nexus !");
-        }
+    public boolean hasAccess(NexusNetwork network, UUID playerUUID) {
+        // Utilisation de la structure réseau correcte pour vérifier l'accès des membres
+        return network.getMembers().contains(playerUUID);
     }
 
     /**
-     * Vérifie si une position est protégée par un dôme actif
-     * et si le joueur qui interagit en est le propriétaire (ou a accès).
+     * Logique d'activation d'un dôme depuis un bloc du réseau
      */
-    private boolean isProtected(Location blockLoc, Player player) {
-        for (Map.Entry<Location, UUID> entry : activeDomes.entrySet()) {
-            Location domeLoc = entry.getKey();
-            UUID ownerUUID = entry.getValue();
-
-            // Même monde et rayon de 100 blocs autour (pour faire une zone de 200x200)
-            if (blockLoc.getWorld().equals(domeLoc.getWorld())) {
-                double distanceX = Math.abs(blockLoc.getX() - domeLoc.getX());
-                double distanceZ = Math.abs(blockLoc.getZ() - domeLoc.getZ());
-
-                if (distanceX <= 100 && distanceZ <= 100) {
-                    // Si le joueur est le propriétaire, il a le droit de construire/casser
-                    if (player.getUniqueId().equals(ownerUUID)) {
-                        return false;
-                    }
-                    
-                    // Optionnel : Permettre aux membres du Nexus d'y accéder aussi
-                    NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(ownerUUID);
-                    if (network != null && network.getMembers().contains(player.getUniqueId())) {
-                        return false;
-                    }
-
-                    return true; // Zone protégée pour les autres !
-                }
-            }
+    public void handleShieldActivation(Main plugin, Location loc, UUID networkOwner) {
+        if (this == SHIELD_GENERATOR) {
+            plugin.getShieldDomeManager().registerDome(loc, networkOwner);
+            loc.getWorld().sendMessage(
+                    Component.text("⚡ Un dôme énergétique Nexus vient d'être déployé !", NamedTextColor.GREEN)
+            );
         }
-        return false;
-    }
-
-    public void registerDome(Location loc, UUID owner) {
-        activeDomes.put(loc, owner);
-    }
-
-    public void unregisterDome(Location loc) {
-        activeDomes.remove(loc);
     }
 }

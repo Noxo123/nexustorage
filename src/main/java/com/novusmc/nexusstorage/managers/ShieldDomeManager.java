@@ -1,191 +1,488 @@
 package com.novusmc.nexusstorage.managers;
 
 import com.novusmc.nexusstorage.Main;
-import com.novusmc.nexusstorage.model.NexusNetwork;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.entity.Player;
+import com.novusmc.nexusstorage.model.EnergyGraph;
+import org.bukkit.*;
+import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.entity.EntityExplodeEvent;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
+import org.bukkit.event.entity.*;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public class ShieldDomeManager implements Listener {
 
+
     private final Main plugin;
-    private final Map<Location, UUID> activeDomes = new HashMap<>();
-    private final int RADIUS = 100; 
 
-    public ShieldDomeManager(Main plugin) {
+
+    private final Map<Location, Dome> domes = new HashMap<>();
+
+
+    private static final int RADIUS = 100;
+
+
+    private static final long ENERGY_COST = 250;
+
+
+    public ShieldDomeManager(Main plugin){
+
         this.plugin = plugin;
-        startEnergyDrainTask();
-        startDomeEffectsAndVisualsTask();
+
+
+        startEnergyTask();
+
+        startVisualTask();
+
     }
 
-    private void startEnergyDrainTask() {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                // TODO: Logique de drain d'énergie (actuellement forcé à faux/vrai selon vos besoins)
-                activeDomes.entrySet().removeIf(entry -> {
-                    Location loc = entry.getKey();
-                    UUID networkId = entry.getValue();
-                    NexusNetwork network = plugin.getNexusManager().getNetworkIfExists(networkId);
 
-                    boolean hasEnoughEnergy = true; 
 
-                    if (!hasEnoughEnergy || network == null) {
-                        Bukkit.broadcastMessage("§c[Nexus] Un dôme de protection à la position X: " + loc.getBlockX() + " Z: " + loc.getBlockZ() + " s'est éteint !");
-                        
-                        // Nettoyage visuel pour tous les joueurs à l'extinction
-                        for (Player p : loc.getWorld().getPlayers()) {
-                            p.setWorldBorder(loc.getWorld().getWorldBorder());
-                        }
-                        return true; 
-                    }
-                    return false;
-                });
-            }
-        }.runTaskTimer(plugin, 20L * 60L, 20L * 60L); 
-    }
-
-    private void startDomeEffectsAndVisualsTask() {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (activeDomes.isEmpty()) return;
-
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    Location pLoc = player.getLocation();
-                    Location nearestDome = null;
-                    double closestDistance = Double.MAX_VALUE;
-
-                    for (Location domeLoc : activeDomes.keySet()) {
-                        if (!domeLoc.getWorld().equals(pLoc.getWorld())) continue;
-
-                        double dist = pLoc.distance(domeLoc);
-                        if (dist < closestDistance) {
-                            closestDistance = dist;
-                            nearestDome = domeLoc;
-                        }
-                    }
-
-                    if (nearestDome == null) continue;
-
-                    double deltaX = Math.abs(pLoc.getX() - nearestDome.getX());
-                    double deltaZ = Math.abs(pLoc.getZ() - nearestDome.getZ());
-
-                    // Si le joueur est dans la zone carrée (ou utilisez la distance pour un cercle)
-                    if (deltaX <= RADIUS && deltaZ <= RADIUS) {
-                        // 1. Effets de potion
-                        player.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 160, 0, true, false, true));
-                        player.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, 160, 0, true, false, true));
-                        player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 160, 0, true, false, true));
-
-                        // 2. Gestion de la WorldBorder factice si proche du bord
-                        if (deltaX >= (RADIUS - 15) || deltaZ >= (RADIUS - 15)) {
-                            org.bukkit.WorldBorder fakeBorder = Bukkit.createWorldBorder();
-                            fakeBorder.setCenter(nearestDome.getX(), nearestDome.getZ());
-                            fakeBorder.setSize(RADIUS * 2.0);
-                            fakeBorder.setWarningDistance(5); 
-                            player.setWorldBorder(fakeBorder);
-                        } else {
-                            player.setWorldBorder(player.getWorld().getWorldBorder());
-                        }
-
-                        // 3. AFFICHAGE DU DÔME EN VERRE TRAVERSABLE (Faux blocs envoyés au client)
-                        // On affiche uniquement une portion du dôme proche des yeux du joueur pour éviter le lag
-                        showFakeGlassDome(player, nearestDome);
-
-                    } else {
-                        player.setWorldBorder(player.getWorld().getWorldBorder());
-                    }
-                }
-            }
-        }.runTaskTimer(plugin, 0L, 40L); // S'exécute toutes les 2 secondes
-    }
-
-    /**
-     * Envoie des faux blocs de verre au joueur pour dessiner le contour du dôme sans bloquer ses mouvements.
+    /*
+        Structure d'un dôme
      */
-    private void showFakeGlassDome(Player player, Location domeCenter) {
-        Location pLoc = player.getLocation();
-        int playerY = pLoc.getBlockY();
-        
-        // On ne génère les blocs que dans un rayon de 16 blocs autour du joueur pour optimiser les performances
-        int viewRadius = 16; 
-        
-        for (int x = pLoc.getBlockX() - viewRadius; x <= pLoc.getBlockX() + viewRadius; x++) {
-            for (int z = pLoc.getBlockZ() - viewRadius; z <= pLoc.getBlockZ() + viewRadius; z++) {
-                
-                // Vérifie si ces coordonnées X/Z touchent exactement la limite du dôme (carré)
-                boolean isAtXBorder = Math.abs(x - domeCenter.getBlockX()) == RADIUS;
-                boolean isAtZBorder = Math.abs(z - domeCenter.getBlockZ()) == RADIUS;
-                
-                // Si on est sur la bordure du dôme
-                if ((isAtXBorder && Math.abs(z - domeCenter.getBlockZ()) <= RADIUS) || 
-                    (isAtZBorder && Math.abs(x - domeCenter.getBlockX()) <= RADIUS)) {
-                    
-                    // On affiche le mur de verre sur une hauteur de 5 blocs autour de la hauteur du joueur
-                    for (int y = playerY - 2; y <= playerY + 4; y++) {
-                        Location blockLoc = new Location(domeCenter.getWorld(), x, y, z);
-                        
-                        // Si le vrai bloc est de l'air, on le remplace visuellement par du verre teinté (ex: bleu)
-                        if (blockLoc.getBlock().getType() == Material.AIR) {
-                            player.sendBlockChange(blockLoc, Material.BLUE_STAINED_GLASS.createBlockData());
-                        }
+
+    private static class Dome {
+
+
+        Location center;
+
+        UUID network;
+
+
+        Dome(Location center, UUID network){
+
+            this.center=center.clone();
+
+            this.network=network;
+
+        }
+
+    }
+
+
+
+
+    /*
+        Activation via Nexus Core
+     */
+
+    public void activate(Location core, UUID network){
+
+        domes.put(core.clone(), new Dome(core,network));
+
+
+        core.getWorld().playSound(
+                core,
+                Sound.BLOCK_BEACON_ACTIVATE,
+                2,
+                1
+        );
+
+
+        Bukkit.broadcastMessage(
+                "§b[Nexus] §fDôme énergétique activé."
+        );
+
+    }
+
+
+
+
+    public void deactivate(Location loc){
+
+
+        domes.remove(loc);
+
+
+        loc.getWorld().playSound(
+                loc,
+                Sound.BLOCK_BEACON_DEACTIVATE,
+                2,
+                1
+        );
+
+    }
+
+
+
+
+    /*
+        Consommation énergie
+     */
+
+    private void startEnergyTask(){
+
+
+        new BukkitRunnable(){
+
+
+            @Override
+            public void run(){
+
+
+                Iterator<Map.Entry<Location,Dome>> iterator =
+                        domes.entrySet().iterator();
+
+
+
+                while(iterator.hasNext()){
+
+
+                    Dome dome = iterator.next().getValue();
+
+
+
+                    EnergyGraph graph =
+                            plugin.getEnergyManager()
+                                    .getGraphContaining(dome.center);
+
+
+
+                    if(graph == null){
+
+                        iterator.remove();
+                        continue;
+
                     }
+
+
+
+                    boolean power =
+                            plugin.getEnergyManager()
+                                    .consumeEnergy(
+                                            graph,
+                                            ENERGY_COST
+                                    );
+
+
+                    if(!power){
+
+
+                        iterator.remove();
+
+
+                        Bukkit.broadcastMessage(
+                                "§c[Nexus] Dôme désactivé : énergie insuffisante."
+                        );
+
+
+                    }
+
+
                 }
+
+
             }
-        }
+
+
+        }.runTaskTimer(
+                plugin,
+                20L*10,
+                20L*10
+        );
+
+
     }
 
-    public boolean isProtected(Location loc) {
-        for (Location domeLoc : activeDomes.keySet()) {
-            if (!domeLoc.getWorld().equals(loc.getWorld())) continue;
-            
-            double deltaX = Math.abs(loc.getX() - domeLoc.getX());
-            double deltaZ = Math.abs(loc.getZ() - domeLoc.getZ());
-            
-            if (deltaX <= RADIUS && deltaZ <= RADIUS) {
+
+
+
+
+    /*
+        Particules sphère
+     */
+
+    private void startVisualTask(){
+
+
+        new BukkitRunnable(){
+
+
+            @Override
+            public void run(){
+
+
+                for(Dome dome : domes.values()){
+
+
+                    drawSphere(dome.center);
+
+
+                    for(Player p :
+                            dome.center.getWorld().getPlayers()){
+
+
+                        if(isInside(
+                                p.getLocation(),
+                                dome.center
+                        )){
+
+
+                            p.spawnParticle(
+                                    Particle.GLOW,
+                                    p.getLocation()
+                                            .add(0,1,0),
+                                    5,
+                                    .3,.5,.3,
+                                    0
+                            );
+
+                        }
+
+                    }
+
+
+                }
+
+
+            }
+
+
+        }.runTaskTimer(
+                plugin,
+                0,
+                10
+        );
+
+
+    }
+
+
+
+
+
+    private void drawSphere(Location center){
+
+
+        World world=center.getWorld();
+
+
+        int points=120;
+
+
+        for(int i=0;i<points;i++){
+
+
+            double theta =
+                    Math.random()*Math.PI*2;
+
+
+            double phi =
+                    Math.acos(
+                            2*Math.random()-1
+                    );
+
+
+
+            double x =
+                    RADIUS*
+                    Math.sin(phi)*
+                    Math.cos(theta);
+
+
+
+            double y =
+                    RADIUS*
+                    Math.cos(phi);
+
+
+
+            double z =
+                    RADIUS*
+                    Math.sin(phi)*
+                    Math.sin(theta);
+
+
+
+            Location particle =
+                    center.clone()
+                            .add(x,y,z);
+
+
+
+            world.spawnParticle(
+                    Particle.END_ROD,
+                    particle,
+                    1,
+                    0,
+                    0,
+                    0,
+                    0
+            );
+
+        }
+
+
+    }
+
+
+
+
+    /*
+        Vérification sphère
+     */
+
+    public boolean isProtected(Location loc){
+
+
+        for(Dome dome:domes.values()){
+
+
+            if(!loc.getWorld()
+                    .equals(dome.center.getWorld()))
+                continue;
+
+
+
+            if(loc.distanceSquared(
+                    dome.center
+            )
+                    <= RADIUS*RADIUS)
                 return true;
-            }
+
+
         }
+
+
         return false;
+
     }
+
+
+
+
+
+    /*
+        Anti grief
+     */
+
 
     @EventHandler
-    public void onBlockBreak(BlockBreakEvent event) {
-        Player player = event.getPlayer();
-        if (isProtected(event.getBlock().getLocation())) {
-            if (!player.hasPermission("nexusstorage.bypass.dome")) {
-                event.setCancelled(true);
-                player.sendMessage("§cCette zone est protégée par un dôme énergétique du Nexus.");
-            }
+    public void onBreak(BlockBreakEvent e){
+
+
+        if(isProtected(e.getBlock().getLocation())
+                &&
+                !e.getPlayer()
+                        .hasPermission(
+                                "nexusstorage.dome.bypass"
+                        )){
+
+
+            e.setCancelled(true);
+
+
+            e.getPlayer()
+                    .sendMessage(
+                            "§cBouclier Nexus actif."
+                    );
+
         }
+
+
     }
+
+
+
+
+
+    /*
+        Anti TNT / Creeper
+     */
 
     @EventHandler
-    public void onExplosion(EntityExplodeEvent event) {
-        event.blockList().removeIf(block -> isProtected(block.getLocation()));
+    public void explosion(EntityExplodeEvent e){
+
+
+        e.blockList()
+                .removeIf(
+                        b -> isProtected(
+                                b.getLocation()
+                        )
+                );
+
+
     }
 
-    public void registerDome(Location loc, UUID networkId) {
-        activeDomes.put(loc, networkId);
-    }
 
-    public void unregisterDome(Location loc) {
-        activeDomes.remove(loc);
-        for (Player p : loc.getWorld().getPlayers()) {
-            p.setWorldBorder(loc.getWorld().getWorldBorder());
+
+
+
+    @EventHandler
+    public void creeper(CreeperPowerEvent e){
+
+
+        if(isProtected(
+                e.getEntity()
+                        .getLocation()
+        )){
+
+
+            e.setCancelled(true);
+
         }
+
     }
+
+
+
+
+
+    /*
+        Protection mobs
+     */
+
+
+    @EventHandler
+    public void entityDamage(EntityDamageByEntityEvent e){
+
+
+        if(!(e.getEntity() instanceof Player))
+            return;
+
+
+        if(e.getDamager() instanceof Monster
+                &&
+                isProtected(
+                        e.getEntity()
+                                .getLocation()
+                )){
+
+
+            e.setCancelled(true);
+
+
+        }
+
+
+    }
+
+
+
+
+    /*
+        Nettoyage
+     */
+
+
+    public void clear(){
+
+
+        domes.clear();
+
+
+    }
+
+
+
+    public Map<Location,Dome> getDomes(){
+
+        return Collections.unmodifiableMap(domes);
+
+    }
+
+
 }

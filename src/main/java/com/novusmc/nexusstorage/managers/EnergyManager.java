@@ -46,6 +46,7 @@ public class EnergyManager {
 
     private final Main plugin;
     private final File file;
+    private final List<Vector> spherePoints = new ArrayList<>();
     private final Map<String, BlockRecord> registry = new HashMap<>();
     private final Map<Location, EnergyGraph> graphs  = new HashMap<>();
 
@@ -278,7 +279,7 @@ public class EnergyManager {
         return total;
     }
 
-    private boolean consumeEnergy(EnergyGraph graph, long amount) {
+    public boolean consumeEnergy(EnergyGraph graph, long amount) {
         if (totalStoredOf(graph) < amount) return false;
         long remaining = amount;
         for (Location loc : graph.getStorages()) {
@@ -447,4 +448,11 @@ public class EnergyManager {
         }
         return new EnergyStats(cap, stored, prod, cons, cables, machines, nets);
     }
+    private boolean isInside(Location loc, Location center) {
+
+    if (!loc.getWorld().equals(center.getWorld()))
+        return false;
+
+    return loc.distanceSquared(center) <= RADIUS * RADIUS;
+}
 }

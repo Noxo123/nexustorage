@@ -36,8 +36,6 @@ public class EnergyManager {
             BlockFace.UP, BlockFace.DOWN, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST
     };
 
-    // Remplacement par une structure mutable propre (ou un record si non modifié à la volée, 
-    // mais r.stored et r.threshold changent, donc classe finale)
     private static final class BlockRecord {
         private final EnergyBlockType type;
         private final Location location;
@@ -56,7 +54,6 @@ public class EnergyManager {
     private final Map<Location, BlockRecord> registry = new HashMap<>();
     private final Map<Location, EnergyGraph> graphs = new HashMap<>();
 
-    // Listes séparées par rôle dans chaque graphe (évite les boucles incorrectes)
     private final Map<Location, List<Location>> graphFurnaces = new HashMap<>();
     private final Map<Location, List<Location>> graphShields = new HashMap<>();
 
@@ -208,7 +205,7 @@ public class EnergyManager {
                         case SHIELD    -> shields.add(next);
                         case REGULATOR -> graph.getRegulators().add(next);
                         case MONITOR   -> graph.getMonitors().add(next);
-                        case CORE      -> {} // Deux cores connectés : le second est ignoré
+                        case CORE      -> {}
                     }
                 }
             }
@@ -268,7 +265,6 @@ public class EnergyManager {
             graph.setLastProduction(net);
             distributeToStorages(graph, net);
 
-            // Vente auto de l'excès
             tryAutoSell(graph);
 
             double consumed = runInterfaces(graph)
@@ -299,7 +295,8 @@ public class EnergyManager {
         }
     }
 
-    public long getTotalStoredOf(EnergyGraph graph) {
+    // REMISE DU NOM D'ORIGINE POUR NEXUSGUIMANAGER
+    public long totalStoredOf(EnergyGraph graph) {
         long total = 0;
         for (Location loc : graph.getStorages()) {
             BlockRecord r = registry.get(loc);
@@ -308,8 +305,9 @@ public class EnergyManager {
         return total;
     }
 
-    private boolean consumeEnergy(EnergyGraph graph, long amount) {
-        if (getTotalStoredOf(graph) < amount) return false;
+    // PASSAGE EN PUBLIC POUR SHIELDDOMEMANAGER
+    public boolean consumeEnergy(EnergyGraph graph, long amount) {
+        if (totalStoredOf(graph) < amount) return false;
         long remaining = amount;
         
         for (Location loc : graph.getStorages()) {
@@ -324,7 +322,6 @@ public class EnergyManager {
         return true;
     }
 
-    /** Vente automatique de l'excès d'énergie via EnergyMarketManager. */
     private void tryAutoSell(EnergyGraph graph) {
         UUID owner = graph.getOwnerId();
         if (owner == null) return;
@@ -332,8 +329,7 @@ public class EnergyManager {
         EnergyMarketManager.MarketData data = plugin.getEnergyMarketManager().getOrCreate(owner);
         if (!data.autoSell) return;
 
-        // Calcule le surplus au-dessus de 90% de capacité
-        long stored = getTotalStoredOf(graph);
+        long stored = totalStoredOf(graph);
         long capacity = graph.getTotalCapacity();
         if (capacity <= 0) return;
         
@@ -341,13 +337,11 @@ public class EnergyManager {
         long surplus = stored - threshold;
         if (surplus <= 0) return;
 
-        // Consomme l'énergie en surplus et la vend
         if (!consumeEnergy(graph, surplus)) return;
         Player ownerOnline = Bukkit.getPlayer(owner);
         plugin.getEnergyMarketManager().trySell(owner, surplus, ownerOnline);
     }
 
-    /** Transfert items coffre -> stockage Nexus, consomme de l'énergie. */
     private double runInterfaces(EnergyGraph graph) {
         if (graph.isInterfacesPaused() || graph.getOwnerId() == null) return 0;
         
@@ -377,7 +371,6 @@ public class EnergyManager {
         return consumed;
     }
 
-    /** Cuisson accélérée via blocs FURNACE du réseau. */
     private double runElectricFurnaces(EnergyGraph graph, List<Location> furnaceLocs) {
         if (graph.isInterfacesPaused() || furnaceLocs.isEmpty()) return 0;
         
@@ -392,7 +385,6 @@ public class EnergyManager {
             ItemStack smelting = inv.getSmelting();
             
             if (smelting == null || smelting.getType() == Material.AIR) {
-                // Éteindre visuellement le four
                 if (adj.getBlockData() instanceof Lightable l && l.isLit() && adj.getCookTime() == 0) {
                     l.setLit(false);
                     adj.setBlockData(l);
@@ -493,7 +485,7 @@ public class EnergyManager {
         for (EnergyGraph g : graphs.values()) {
             if (!owner.equals(g.getOwnerId())) continue;
             cap += g.getTotalCapacity();
-            stored += getTotalStoredOf(g);
+            stored += totalStoredOf(g);
             prod += g.getLastProduction();
             cons += g.getLastConsumption();
             cables += g.getCables().size();

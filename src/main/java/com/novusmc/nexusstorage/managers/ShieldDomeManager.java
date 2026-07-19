@@ -2,6 +2,8 @@ package com.novusmc.nexusstorage.managers;
 
 import com.novusmc.nexusstorage.Main;
 import com.novusmc.nexusstorage.model.EnergyGraph;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.*;
 import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
@@ -49,12 +51,13 @@ public class ShieldDomeManager implements Listener {
         core.getWorld().playSound(
                 core,
                 Sound.BLOCK_BEACON_ACTIVATE,
-                2,
-                1
+                2.0f,
+                1.0f
         );
 
-        Bukkit.broadcastMessage(
-                "§b[Nexus] §fDôme énergétique activé."
+        plugin.getServer().sendMessage(
+                Component.text("[Nexus] ", NamedTextColor.AQUA)
+                        .append(Component.text("Dôme énergétique activé.", NamedTextColor.WHITE))
         );
     }
 
@@ -64,8 +67,8 @@ public class ShieldDomeManager implements Listener {
         loc.getWorld().playSound(
                 loc,
                 Sound.BLOCK_BEACON_DEACTIVATE,
-                2,
-                1
+                2.0f,
+                1.0f
         );
     }
 
@@ -92,8 +95,8 @@ public class ShieldDomeManager implements Listener {
 
                     if (!power) {
                         iterator.remove();
-                        Bukkit.broadcastMessage(
-                                "§c[Nexus] Dôme désactivé : énergie insuffisante."
+                        plugin.getServer().sendMessage(
+                                Component.text("[Nexus] Dôme désactivé : énergie insuffisante.", NamedTextColor.RED)
                         );
                     }
                 }
@@ -137,6 +140,8 @@ public class ShieldDomeManager implements Listener {
 
     private void drawSphere(Location center) {
         World world = center.getWorld();
+        if (world == null) return;
+        
         int points = 120;
 
         for (int i = 0; i < points; i++) {
@@ -187,7 +192,7 @@ public class ShieldDomeManager implements Listener {
                 && !e.getPlayer().hasPermission("nexusstorage.dome.bypass")) {
 
             e.setCancelled(true);
-            e.getPlayer().sendMessage("§cBouclier Nexus actif.");
+            e.getPlayer().sendMessage(Component.text("Bouclier Nexus actif.", NamedTextColor.RED));
         }
     }
 
